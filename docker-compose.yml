@@ -1,0 +1,71 @@
+
+services:
+  pg:
+    image: postgres:17
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: ${POSTGRESQL_DATABASE}
+      POSTGRES_USER: ${POSTGRESQL_USERNAME}
+      POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
+    ports:
+      - "${POSTGRESQL_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - 8090:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRESQL_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"  # for local dev, to avoid CSRF issues
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - pg
+    networks:
+      - backend
+
+  backend:
+    build: .
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRESQL_USERNAME}:${POSTGRESQL_PASSWORD}@pg:${POSTGRESQL_PORT:-5432}/${POSTGRESQL_DATABASE}"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - pg
+    networks:
+      - backend
+
+  alembic:
+    image: python:3.12
+    working_dir: /app
+    user: "1000:1000"  # replace with your host UID:GID
+    volumes:
+      - ./:/app
+    depends_on:
+      - pg
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRESQL_USERNAME}:${POSTGRESQL_PASSWORD}@pg:${POSTGRESQL_PORT:-5432}/${POSTGRESQL_DATABASE}"
+      SQLALCHEMY_DATABASE_URI: "postgresql://${POSTGRESQL_USERNAME}:${POSTGRESQL_PASSWORD}@pg:${POSTGRESQL_PORT:-5432}/${POSTGRESQL_DATABASE}"
+    networks:
+      - backend
+    command: >
+      bash -c "
+      pip install -q --user -r requirements.txt &&
+      until pg_isready -h pg -p 5432; do sleep 1; done &&
+      python -m alembic upgrade head
+      "
+
+volumes:
+  pg-data:
+    driver: local
+  pgadmin-data:
+    driver: local
+
+networks:
+  backend:
+    driver: bridge

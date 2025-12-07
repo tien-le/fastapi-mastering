@@ -1,0 +1,16 @@
+uvicorn[standard]
+fastapi[standard]
+httpx
+pytest
+pytest-asyncio
+pydantic
+pydantic-settings
+mypy
+sqlalchemy
+alembic
+python-dotenv
+psycopg2-binary
+mypy
+aiosqlite
+rich
+asgi-correlation-id
