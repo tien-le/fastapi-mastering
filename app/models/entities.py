@@ -1,30 +1,118 @@
-from pydantic import BaseModel, ConfigDict
+"""Pydantic models for request/response validation using Pydantic 2.0."""
+from pydantic import BaseModel, ConfigDict, Field
 
 
-# User Post
 class UserPostIn(BaseModel):
-    body: str
+    """Input model for creating a new post.
+
+    Attributes:
+        body: The content of the post (can be empty)
+    """
+
+    body: str = Field(..., description="The content of the post")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "body": "This is a sample post content",
+            }
+        }
+    )
 
 
-class UserPost(UserPostIn):
-    id: int
+class UserPost(BaseModel):
+    """Output model for a post.
 
-    # To enable ORM mode, or access to attributes using dot notation,
-    # we might add a configuration dictionary with "from_attributes=True"
-    model_config = ConfigDict(from_attributes=True)
+    Attributes:
+        id: Unique identifier for the post
+        body: The content of the post
+    """
+
+    id: int = Field(..., gt=0, description="Unique identifier for the post")
+    body: str = Field(..., description="The content of the post")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "body": "This is a sample post content",
+            }
+        },
+    )
 
 
-# User Comment
 class CommentIn(BaseModel):
-    body: str
-    post_id: int
+    """Input model for creating a new comment.
+
+    Attributes:
+        body: The content of the comment (can be empty)
+        post_id: The ID of the post this comment belongs to
+    """
+
+    body: str = Field(..., description="The content of the comment")
+    post_id: int = Field(..., gt=0, description="The ID of the post this comment belongs to")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "body": "This is a sample comment",
+                "post_id": 1,
+            }
+        }
+    )
 
 
-class Comment(CommentIn):
-    id: int
-    model_config = ConfigDict(from_attributes=True)
+class Comment(BaseModel):
+    """Output model for a comment.
+
+    Attributes:
+        id: Unique identifier for the comment
+        body: The content of the comment
+        post_id: The ID of the post this comment belongs to
+    """
+
+    id: int = Field(..., gt=0, description="Unique identifier for the comment")
+    body: str = Field(..., description="The content of the comment")
+    post_id: int = Field(..., gt=0, description="The ID of the post this comment belongs to")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "body": "This is a sample comment",
+                "post_id": 1,
+            }
+        },
+    )
 
 
 class UserPostWithComments(BaseModel):
-    post: UserPost
-    comments: list[Comment]
+    """Output model for a post with all its comments.
+
+    Attributes:
+        post: The post data
+        comments: List of comments associated with the post
+    """
+
+    post: UserPost = Field(..., description="The post data")
+    comments: list[Comment] = Field(default_factory=list, description="List of comments")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "post": {
+                    "id": 1,
+                    "body": "This is a sample post",
+                },
+                "comments": [
+                    {
+                        "id": 1,
+                        "body": "This is a comment",
+                        "post_id": 1,
+                    }
+                ],
+            }
+        }
+    )

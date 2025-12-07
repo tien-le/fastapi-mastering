@@ -1,34 +1,53 @@
-"""Database configuration and session management."""
+"""Database configuration and session management using SQLAlchemy 2.0."""
+import logging
+from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool, QueuePool
 
 from app.core.config_loader import settings
 
-# engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-# SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = logging.getLogger(__name__)
 
-engine = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
-async_session = async_sessionmaker(engine)
+# Create async engine with optimized settings
+engine = create_async_engine(
+    str(settings.SQLALCHEMY_DATABASE_URI),
+    echo=False,  # Set to True for SQL query logging
+    poolclass=NullPool if "sqlite" in str(settings.SQLALCHEMY_DATABASE_URI) else QueuePool,
+    pool_pre_ping=True,  # Verify connections before using
+    future=True,  # Use SQLAlchemy 2.0 style
+)
 
-# Cach 2
-# from sqlalchemy.ext.declarative import declarative_base
-# Base = declarative_base()
+# Create async session factory
+async_session = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,  # Prevent expired instances after commit
+    autoflush=False,  # Manual flush control
+    autocommit=False,
+)
 
 
-async def get_async_session() -> AsyncSession:
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    """Dependency that provides an async database session.
+
+    Yields:
+        AsyncSession: Database session
+
+    The session is automatically committed on success or rolled back on exception.
+    """
     async with async_session() as session:
         try:
             yield session
             await session.commit()
-        except:
+            logger.debug("Database session committed successfully")
+        except Exception as e:
             await session.rollback()
+            logger.error(f"Database session rolled back due to error: {e}", exc_info=True)
             raise
-
-
-def get_db():
-    """Dependency that provides a database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+        finally:
+            await session.close()

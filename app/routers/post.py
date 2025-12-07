@@ -1,3 +1,12 @@
+"""Post and comment router module using FastAPI, SQLAlchemy 2.0, and Pydantic 2.0."""
+import logging
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, status, Depends, Path
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.core.database import get_async_session
 from app.models.entities import (
     UserPost,
     UserPostIn,
@@ -5,109 +14,186 @@ from app.models.entities import (
     CommentIn,
     UserPostWithComments,
 )
-from fastapi import APIRouter, HTTPException, status, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.models.orm import Post, Comment as CommentORM  # models.orm
-from app.core.database import get_async_session
-
-import logging
+from app.models.orm import Post, Comment as CommentORM
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["posts"])
 
 
-# Utility
-async def find_post(session: AsyncSession, post_id: int) -> UserPost | None:
+# Dependencies
+async def get_post_by_id(
+    post_id: Annotated[int, Path(gt=0, description="The ID of the post")],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> Post:
+    """
+    Dependency to fetch a post by ID.
+
+    Raises:
+        HTTPException: 404 if post not found
+    """
     query = select(Post).where(Post.id == post_id)
-    logger.debug(f"find_post with query={query}")
+    logger.debug(f"Fetching post with id={post_id}")
     result = await session.execute(query)
     post: Post | None = result.scalar_one_or_none()
+
     if post is None:
-        return None
-    # Convert ORM -> pydantic
+        logger.warning(f"Post with id={post_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id={post_id} not found",
+        )
+
+    return post
+
+
+# Utility functions
+async def _find_post(session: AsyncSession, post_id: int) -> Post | None:
+    """Internal utility to find a post without raising exceptions."""
+    query = select(Post).where(Post.id == post_id)
+    result = await session.execute(query)
+    return result.scalar_one_or_none()
+
+
+def _convert_post_to_entity(post: Post) -> UserPost:
+    """Convert ORM Post to Pydantic UserPost entity."""
     return UserPost.model_validate(post, from_attributes=True)
 
 
-### Post ###
-@router.post("/post", response_model=UserPost, status_code=201)
+def _convert_comment_to_entity(comment: CommentORM) -> Comment:
+    """Convert ORM Comment to Pydantic Comment entity."""
+    return Comment.model_validate(comment, from_attributes=True)
+
+
+# Post endpoints
+@router.post(
+    "/post",
+    response_model=UserPost,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new post",
+    description="Creates a new post with the provided body content",
+)
 async def create_post(
-    post: UserPostIn, session: AsyncSession = Depends(get_async_session)
-):
+    post: UserPostIn,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> UserPost:
+    """Create a new post."""
+    logger.info(f"Creating new post with body length: {len(post.body)}")
     new_post = Post(**post.model_dump())
     session.add(new_post)
     await session.commit()
     await session.refresh(new_post)
-    return UserPost.model_validate(new_post, from_attributes=True)
+    logger.debug(f"Created post with id={new_post.id}")
+    return _convert_post_to_entity(new_post)
 
 
-@router.get("/posts", response_model=list[UserPost])
-async def get_posts(session: AsyncSession = Depends(get_async_session)):
-    logger.info("Getting all posts")
+@router.get(
+    "/posts",
+    response_model=list[UserPost],
+    summary="Get all posts",
+    description="Retrieves all posts from the database",
+)
+async def get_posts(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[UserPost]:
+    """Get all posts."""
+    logger.info("Fetching all posts")
     result = await session.execute(select(Post))
     posts = result.scalars().all()
-    return [UserPost.model_validate(p, from_attributes=True) for p in posts]
+    logger.debug(f"Found {len(posts)} posts")
+    return [_convert_post_to_entity(post) for post in posts]
 
 
-### Comment ###
-
-
-@router.get("/comments", response_model=list[Comment])
-async def get_comments(session: AsyncSession = Depends(get_async_session)):
+# Comment endpoints
+@router.get(
+    "/comments",
+    response_model=list[Comment],
+    summary="Get all comments",
+    description="Retrieves all comments from the database",
+)
+async def get_comments(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[Comment]:
+    """Get all comments."""
+    logger.info("Fetching all comments")
     result = await session.execute(select(CommentORM))
     comments = result.scalars().all()
-    return [Comment.model_validate(c, from_attributes=True) for c in comments]
+    logger.debug(f"Found {len(comments)} comments")
+    return [_convert_comment_to_entity(comment) for comment in comments]
 
 
-@router.post("/comment", response_model=Comment, status_code=201)
+@router.post(
+    "/comment",
+    response_model=Comment,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new comment",
+    description="Creates a new comment for a specific post",
+)
 async def create_comment(
-    comment: CommentIn, session: AsyncSession = Depends(get_async_session)
-):
-    post = await find_post(session, comment.post_id)
+    comment: CommentIn,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> Comment:
+    """Create a new comment for a post."""
+    logger.info(f"Creating comment for post_id={comment.post_id}")
+
+    # Validate post exists
+    post = await _find_post(session, comment.post_id)
     if post is None:
+        logger.warning(f"Post with id={comment.post_id} not found")
         raise HTTPException(
-            status_code=404, detail=f"Post Not Found based on post_id={comment.post_id}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id={comment.post_id} not found",
         )
 
     new_comment = CommentORM(**comment.model_dump())
     session.add(new_comment)
     await session.commit()
     await session.refresh(new_comment)
+    logger.debug(f"Created comment with id={new_comment.id}")
+    return _convert_comment_to_entity(new_comment)
 
-    return Comment.model_validate(new_comment, from_attributes=True)
 
-
-@router.get("/posts/{post_id}/comments", response_model=list[Comment])
+@router.get(
+    "/posts/{post_id}/comments",
+    response_model=list[Comment],
+    summary="Get comments for a post",
+    description="Retrieves all comments associated with a specific post",
+)
 async def get_comments_on_post(
-    post_id: int, session: AsyncSession = Depends(get_async_session)
-):
-    # Ensure post exists
-    post = await find_post(session, post_id)
-    if post is None:
-        raise HTTPException(
-            status_code=404, detail=f"Post Not Found based on post_id={post_id}"
-        )
-
-    query = select(CommentORM).where(CommentORM.post_id == post_id)
+    post: Annotated[Post, Depends(get_post_by_id)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> list[Comment]:
+    """Get all comments for a specific post."""
+    logger.info(f"Fetching comments for post_id={post.id}")
+    query = select(CommentORM).where(CommentORM.post_id == post.id)
     result = await session.execute(query)
     comments = result.scalars().all()
-    return [Comment.model_validate(c, from_attributes=True) for c in comments]
+    logger.debug(f"Found {len(comments)} comments for post_id={post.id}")
+    return [_convert_comment_to_entity(comment) for comment in comments]
 
 
-@router.get("/posts/{post_id}", response_model=UserPostWithComments)
+@router.get(
+    "/posts/{post_id}",
+    response_model=UserPostWithComments,
+    summary="Get post with comments",
+    description="Retrieves a specific post along with all its comments",
+)
 async def get_post_with_comments(
-    post_id: int, session: AsyncSession = Depends(get_async_session)
-):
-    # Ensure post exists
-    post = await find_post(session, post_id)
-    if post is None:
-        raise HTTPException(
-            status_code=404, detail=f"Post Not Found based on post_id={post_id}"
-        )
+    post: Annotated[Post, Depends(get_post_by_id)],
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+) -> UserPostWithComments:
+    """Get a post with all its comments.
 
-    query = select(CommentORM).where(CommentORM.post_id == post_id)
+    Efficiently loads comments using SQLAlchemy 2.0 select query.
+    """
+    logger.info(f"Fetching post with comments for post_id={post.id}")
+
+    # Query comments for this post using SQLAlchemy 2.0 style
+    query = select(CommentORM).where(CommentORM.post_id == post.id).order_by(CommentORM.id)
     result = await session.execute(query)
     comment_rows = result.scalars().all()
-    comments = [Comment.model_validate(c, from_attributes=True) for c in comment_rows]
-    return UserPostWithComments(post=post, comments=comments)
+    comments = [_convert_comment_to_entity(comment) for comment in comment_rows]
+    logger.debug(f"Found {len(comments)} comments for post_id={post.id}")
+    return UserPostWithComments(
+        post=_convert_post_to_entity(post), comments=comments
+    )

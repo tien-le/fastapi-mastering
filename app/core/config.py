@@ -1,3 +1,4 @@
+"""Application configuration using Pydantic Settings."""
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -7,11 +8,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def parse_cors(v: Any) -> list[str] | str:
+    """Parse CORS origins from string or list.
+
+    Args:
+        v: CORS origins as string (comma-separated) or list
+
+    Returns:
+        Parsed CORS origins as list or string
+
+    Raises:
+        ValueError: If input format is invalid
+    """
     if isinstance(v, str) and not v.startswith("["):
-        return [i.strip() for i in v.split(",")]
+        return [i.strip() for i in v.split(",") if i.strip()]
     elif isinstance(v, (list, str)):
         return v
-    raise ValueError(v)
+    raise ValueError(f"Invalid CORS format: {v}")
 
 
 # ---------------------------------------------------------
@@ -32,35 +44,60 @@ class BaseConfig(BaseSettings):
 # Global Shared Config
 # ---------------------------------------------------------
 class GlobalConfig(BaseConfig):
-    DOMAIN: str = "localhost"
+    """Global configuration shared across all environments.
 
-    JWT_SECRET_KEY: str = "dev-key"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    Attributes:
+        DOMAIN: Server domain name
+        JWT_SECRET_KEY: Secret key for JWT tokens
+        JWT_ALGORITHM: Algorithm for JWT signing
+        ACCESS_TOKEN_EXPIRE_MINUTES: Token expiration time in minutes
+        BACKEND_CORS_ORIGINS: Allowed CORS origins
+        POSTGRESQL_*: PostgreSQL connection parameters
+        DB_FORCE_ROLLBACK: Force rollback after each request (testing)
+    """
+
+    DOMAIN: str = Field(default="localhost", description="Server domain name")
+
+    JWT_SECRET_KEY: str = Field(default="dev-key", description="JWT secret key")
+    JWT_ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=15, ge=1, description="Token expiration time in minutes"
+    )
 
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str,
         BeforeValidator(parse_cors),
-    ] = Field(default_factory=list)
+    ] = Field(default_factory=list, description="Allowed CORS origins")
+
+    POSTGRESQL_USERNAME: str | None = Field(default=None, description="PostgreSQL username")
+    POSTGRESQL_PASSWORD: str | None = Field(default=None, description="PostgreSQL password")
+    POSTGRESQL_SERVER: str | None = Field(default=None, description="PostgreSQL server host")
+    POSTGRESQL_PORT: int | None = Field(default=None, ge=1, le=65535, description="PostgreSQL port")
+    POSTGRESQL_DATABASE: str | None = Field(default=None, description="PostgreSQL database name")
+
+    DB_FORCE_ROLLBACK: bool = Field(
+        default=False, description="Force rollback after each request (for testing)"
+    )
 
     @computed_field
     @property
     def server_host(self) -> str:
+        """Compute server host URL based on environment.
+
+        Returns:
+            Server URL (http for local, https otherwise)
+        """
         # Use HTTPS for anything other than local development
-        if self.ENVIRONMENT == "local":
+        if self.ENV_STATE == "dev":
             return f"http://{self.DOMAIN}"
         return f"https://{self.DOMAIN}"
 
-    POSTGRESQL_USERNAME: str | None = None
-    POSTGRESQL_PASSWORD: str | None = None
-    POSTGRESQL_SERVER: str | None = None
-    POSTGRESQL_PORT: int | None = None
-    POSTGRESQL_DATABASE: str | None = None
-
-    DB_FORCE_ROLLBACK: bool = False
-
-    # Build database URI
     def build_db_uri(self) -> str:
+        """Build database URI from configuration.
+
+        Returns:
+            Database URI string (SQLite if PostgreSQL not configured, else PostgreSQL)
+        """
         if not all(
             [
                 self.POSTGRESQL_USERNAME,
@@ -72,17 +109,25 @@ class GlobalConfig(BaseConfig):
         ):
             return "sqlite+aiosqlite:///./local.db"
 
-        return MultiHostUrl.build(
-            scheme="postgresql+asyncpg",  # psycopg2
-            username=self.POSTGRESQL_USERNAME,
-            password=self.POSTGRESQL_PASSWORD,
-            host=self.POSTGRESQL_SERVER,
-            port=self.POSTGRESQL_PORT,
-            path=self.POSTGRESQL_DATABASE,
+        return str(
+            MultiHostUrl.build(
+                scheme="postgresql+asyncpg",
+                username=self.POSTGRESQL_USERNAME,
+                password=self.POSTGRESQL_PASSWORD,
+                host=self.POSTGRESQL_SERVER,
+                port=self.POSTGRESQL_PORT,
+                path=self.POSTGRESQL_DATABASE,
+            )
         )
 
+    @computed_field
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Get SQLAlchemy database URI.
+
+        Returns:
+            Database URI string
+        """
         return self.build_db_uri()
 
 
@@ -112,17 +157,23 @@ class TestConfig(GlobalConfig):
 # ---------------------------------------------------------
 @lru_cache()
 def get_settings() -> GlobalConfig:
+    """Get application settings based on ENV_STATE.
+
+    Returns:
+        Configuration instance for the current environment
+
+    The function is cached to avoid reloading settings on every call.
+    """
     base = BaseConfig()
 
-    mapping = {
+    mapping: dict[str, type[GlobalConfig]] = {
         "dev": DevConfig,
         "prod": ProdConfig,
         "test": TestConfig,
     }
 
-    if base.ENV_STATE in mapping:
-        return mapping[base.ENV_STATE]()  # loads ENV-specific values from .env
-    return DevConfig()
+    config_class = mapping.get(base.ENV_STATE, DevConfig)
+    return config_class()  # Loads ENV-specific values from .env
 
 
 settings = get_settings()

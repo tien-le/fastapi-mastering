@@ -1,3 +1,4 @@
+"""Logging configuration module."""
 from logging.config import dictConfig
 
 from app.core.config import DevConfig
@@ -5,6 +6,14 @@ from app.core.config_loader import settings
 
 
 def configure_logging() -> None:
+    """Configure application logging with correlation ID support.
+
+    Sets up:
+    - Console handler with Rich formatting (development)
+    - Rotating file handler for persistent logs
+    - Correlation ID filtering for request tracking
+    - Environment-specific log levels
+    """
     dictConfig(
         {
             "version": 1,

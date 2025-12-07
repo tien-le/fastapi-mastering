@@ -1,11 +1,15 @@
+"""Main FastAPI application module."""
 import logging
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from asgi_correlation_id import CorrelationIdMiddleware
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import JSONResponse
 
-from app.core.config_loader import DevConfig, settings
+from app.core.config import DevConfig
+from app.core.config_loader import settings
 from app.core.database import engine
 from app.core.logging_config import configure_logging
 from app.models.orm import Base
@@ -15,45 +19,71 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
-    Optional: Create DB tables on startup (only for local dev/testing)
-    Remove in production.
+    Application lifespan context manager.
+
+    Handles startup and shutdown tasks:
+    - Configures logging
+    - Creates database tables in development mode
+    - Disposes database engine on shutdown
+
+    Note: Table creation should be replaced with Alembic migrations in production.
     """
-    # Example if you want auto-create tables in dev
-    # from app.models.orm import Base
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
+    configure_logging()
+    logger.info("Application starting up...")
+
     # Auto-create tables in local development to speed up iteration.
     # This should NOT be used in production; prefer Alembic migrations.
     if isinstance(settings, DevConfig):
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-    configure_logging()
-    logger.info("App Starting up...")
+        try:
+            logger.info("Creating database tables...")
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create database tables: {e}", exc_info=True)
+            raise
 
     yield
 
-    # Nothing to close — SQLAlchemy AsyncSession is managed per-request
-    # using dependency injection.
-    # --- Shutdown (after the app stops) ---
-    logger.info("App Shutting down...")
+    # Shutdown: dispose database engine
+    logger.info("Application shutting down...")
     await engine.dispose()
+    logger.info("Application shutdown complete")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="FastAPI Mastering",
+    description="A FastAPI application demonstrating clean code practices",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# Middleware
 app.add_middleware(CorrelationIdMiddleware)
 
-app.include_router(post_router)  # , prefix="/posts")
+# Routers
+app.include_router(post_router)
 
 
-@app.get("/")
-async def get_home() -> dict:
+@app.get("/", response_model=dict[str, str])
+async def get_home() -> dict[str, str]:
+    """Root endpoint returning a welcome message."""
     return {"message": "Hello world!"}
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handle_logging(request, exc):
-    logger.error(f"HTTPException: {exc.status_code} {exc.detail}")
+async def http_exception_handler_with_logging(
+    request: Request, exc: HTTPException
+) -> JSONResponse:
+    """
+    Custom HTTP exception handler with logging.
+
+    Logs all HTTP exceptions before delegating to the default handler.
+    """
+    logger.error(
+        f"HTTPException: {exc.status_code} - {exc.detail}",
+        extra={"path": request.url.path, "method": request.method},
+    )
     return await http_exception_handler(request, exc)
