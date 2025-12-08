@@ -3,6 +3,7 @@ from typing import AsyncGenerator
 import pytest
 from httpx import AsyncClient
 from fastapi import status, HTTPException
+from jose import jwt
 
 from sqlalchemy import select
 
@@ -10,26 +11,14 @@ from app.routers.user import get_user, register
 from app.tests.conftest import AsyncSessionTest
 from app.models.orm import User as UserORM
 from app.models.entities import UserIn
-from app.routers.user import get_password_hash, verify_password
+from app.routers.user import get_password_hash, verify_password, create_access_token, get_current_user
+from app.core.config_loader import settings
+
 
 logger = logging.getLogger(__name__)
 
 
-# Fixtures
-# @pytest.fixture()
-# async def registered_user(async_client: AsyncClient) -> dict:
-#     user_details = {"email": "test@host.com", "password": "123456"}
-#     await async_client.post("/register", json=user_details)
 
-#     async with AsyncSessionTest() as session:
-#         query = select(UserORM).where(UserORM.email==user_details["email"])
-#         result = await session.execute(query)
-#         user = result.scalar_one_or_none()
-#         if user:
-#             user_details["id"] = user.id
-#         else:
-#             logger.debug(f"User Not Found with email: {user_details["email"]}")
-#     return user_details
 
 @pytest.fixture()
 async def registered_user(async_client: AsyncClient) -> dict:
@@ -39,9 +28,12 @@ async def registered_user(async_client: AsyncClient) -> dict:
         "email": "test@host.com",
         "password": "123456"
     }
-    body["password"] = get_password_hash(body["password"])
+    # Store plain password for tests - register endpoint will hash it
+    plain_password = body["password"]
     response = await async_client.post("/register", json=body)
     assert response.status_code == 201
+    # Return body with plain password so tests can use it for authentication
+    body["password"] = plain_password
     return body
 
 
@@ -54,7 +46,7 @@ async def test_create_user(async_client: AsyncClient):
         "email": "test@host.com",
         "password": "123456"
     }
-    body["password"] = get_password_hash(body["password"])
+    # Send plain password - register endpoint will hash it
     response = await async_client.post("/register", json=body)
 
     assert response.status_code == 201
@@ -90,7 +82,76 @@ async def test_register_user_already_exists_direct(async_client: AsyncClient, re
             await register(user=UserIn.model_validate(registered_user), session=session)
         assert exc.value.status_code == 400
 
+
 @pytest.mark.anyio
 async def test_password_hashes():
     password = "password"
     assert verify_password(password, get_password_hash(password))
+
+
+@pytest.mark.anyio
+async def test_login_user_not_exists(async_client: AsyncClient):
+    body = {
+        "id": 123,
+        "email": "test@host.com",
+        "password": "123456"
+    }
+    response = await async_client.post("/token", json=body)
+    assert "Unauthorized" in response.json()["detail"]
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.anyio
+async def test_login_user(async_client: AsyncClient, registered_user: dict):
+    print(f"registered_user: {registered_user}")
+    response = await async_client.post("/token",
+        json={
+            "id": registered_user["id"],
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_create_access_token():
+    email = "test@email.com"
+    token = create_access_token(email=email)
+    assert {"sub": email}.items() <= jwt.decode(
+        token,
+        key=settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM]).items()
+
+
+from app.routers.user import authenticate_user
+
+@pytest.mark.anyio
+async def test_authenticate_user(registered_user: dict):
+    async with AsyncSessionTest() as session:
+        user_result = await authenticate_user(session=session, email=registered_user["email"], password=registered_user["password"])
+        assert user_result.email == registered_user["email"]
+
+
+@pytest.mark.anyio
+async def test_authenticate_user_not_found():
+    async with AsyncSessionTest() as session:
+        with pytest.raises(HTTPException) as exc:
+            await authenticate_user(session=session, email="test@home.com", password="123456")
+        assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "1-Unauthorized" in exc.value.detail
+
+@pytest.mark.anyio
+async def test_authenticate_user_wrong_password(registered_user: dict):
+    async with AsyncSessionTest() as session:
+        with pytest.raises(HTTPException) as exc:
+            await authenticate_user(session=session, email=registered_user["email"], password="wrong password")
+        assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert "2-Unauthorized" in exc.value.detail
+
+@pytest.mark.anyio
+async def test_get_current_user(registered_user: dict):
+    token = create_access_token(email=registered_user["email"])
+    async with AsyncSessionTest() as session:
+        user = await get_current_user(session=session, token=token)
+        assert user.email == registered_user["email"]

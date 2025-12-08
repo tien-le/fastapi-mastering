@@ -1,7 +1,9 @@
 import logging
+import datetime
 from typing import Annotated
 
 from fastapi import HTTPException, APIRouter, Depends, Path, status
+from jose import jwt, ExpiredSignatureError, JWTError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +12,7 @@ from app.models.orm import User as UserORM
 from app.models.entities import User, UserIn
 
 from app.core.database import get_async_session
+from app.core.config_loader import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,8 @@ router = APIRouter(tags=["users"])
 
 import bcrypt
 import hashlib
+
+
 
 def get_password_hash(password: str) -> str:
     """Hash a password using SHA256 and bcrypt."""
@@ -31,10 +36,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(sha, hashed_password.encode())
 
 
+def create_access_token(email: str):
+    logger.debug("Creating access token", extra={"email": email})
+    expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    jwt_data = {"sub": email, "exp": expire}
+    return jwt.encode(jwt_data, key=settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
-def _convert_user_to_entity(user: UserORM) -> User:
+
+def _convert_user_to_entity(user: UserORM) -> UserIn:
     """Convert ORM User to Pydantic User entity."""
-    return User.model_validate(user, from_attributes=True)
+    return UserIn.model_validate(user, from_attributes=True)
 
 
 async def get_user(
@@ -47,6 +60,69 @@ async def get_user(
     logger.debug(f"query: {query}")
     result = await session.execute(query)
     return result.scalar_one_or_none()
+
+
+async def authenticate_user(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    email: str,
+    password: str
+) -> User | None:
+    logger.info("Authenticating User", extra={"email": email})
+    user = await get_user(session=session, email=email)
+    if not user:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail=f"1-Unauthorized with given email: {email}; password: xxx",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    user_entity = _convert_user_to_entity(user)
+    if not verify_password(plain_password=password, hashed_password=user_entity.password):
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail=f"2-Unauthorized with given email: {email}; password: xxx",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return user_entity
+
+
+async def get_current_user(
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    token: str
+):
+    try:
+        payload = jwt.decode(
+            token,
+            key=settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM])
+        # "sub": "email@gmail.com", "exp": 176548579
+        # "sub" is the standard claim for subject (usually user identifier)
+        email = payload.get("sub")
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Unauthorized, cannot get sub",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+    except ExpiredSignatureError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"}
+        ) from e
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Unauthorized with given token",
+            headers={"WWW-Authenticate": "Bearer"}
+        ) from e
+    user = await get_user(session=session, email=email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Unauthorized, cannot get user information",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return _convert_user_to_entity(user)
 
 
 @router.post(
@@ -89,3 +165,21 @@ async def get_users(
     users = result.scalars().all()
     logger.debug(f"Found {len(users)} users.")
     return [_convert_user_to_entity(user) for user in users]
+
+
+@router.post("/token", response_model=dict)
+async def login(
+    user: UserIn,
+    session: Annotated[AsyncSession, Depends(get_async_session)]
+) -> dict:
+    try:
+        logger.info(f"Checking authentication of user: {user}")
+        user_result = await authenticate_user(session=session, email=user.email, password=user.password)
+        access_token = create_access_token(email=user.email)
+        return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException:
+        # Re-raise HTTPException so FastAPI can handle it properly
+        raise
+    except Exception as e:
+        logger.error(f"Error, due to: {e}", exc_info=True)
+        raise
