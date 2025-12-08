@@ -71,12 +71,11 @@ async def test_password_hashes():
 
 @pytest.mark.anyio
 async def test_login_user_not_exists(async_client: AsyncClient):
-    body = {
-        "id": 123,
-        "email": "test@host.com",
+    form_data = {
+        "username": "test@host.com",
         "password": "123456"
     }
-    response = await async_client.post("/token", json=body)
+    response = await async_client.post("/token", data=form_data)
     assert "Unauthorized" in response.json()["detail"]
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -84,13 +83,11 @@ async def test_login_user_not_exists(async_client: AsyncClient):
 @pytest.mark.anyio
 async def test_login_user(async_client: AsyncClient, registered_user: dict):
     print(f"registered_user: {registered_user}")
-    response = await async_client.post("/token",
-        json={
-            "id": registered_user["id"],
-            "email": registered_user["email"],
-            "password": registered_user["password"]
-        }
-    )
+    form_data = {
+        "username": registered_user["email"],
+        "password": registered_user["password"]
+    }
+    response = await async_client.post("/token", data=form_data)
     assert response.status_code == 200
 
 
@@ -140,12 +137,4 @@ async def test_get_current_user_invalid_token():
         with pytest.raises(HTTPException) as exc:
             await get_current_user(session=session, token="invalid-token")
         assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
-
-
-# Authentization
-@pytest.fixture()
-async def logged_in_token(async_client: AsyncClient, registered_user: dict) -> str:
-    response = await async_client.post("/token", json=registered_user)
-    return response.json()["access_token"]
-
 

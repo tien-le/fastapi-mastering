@@ -441,3 +441,13 @@ Both mean:
 + "Inject an instance of OAuth2PasswordRequestForm using Depends()"
 + The request must be application/x-www-form-urlencoded
 + FastAPI will parse fields: username, password, scope, client_id, client_secret
+
+## grant_type -- Why might a token endpoint not work properly in an OAuth2 implementation?
+
+In OAuth2, the token endpoint requires the grant_type to know which flow you're using (password, authorization_code, client_credentials, refresh_token, etc.).
+If it's missing or incorrect, the token endpoint will typically fail or return an invalid_request error.
+
+### Why it matters
+
+The grant_type tells the authorization server which OAuth2 flow is being used.
+If it's missing, the server won't know how to process the request and the token endpoint will fail.

@@ -1,9 +1,10 @@
 import logging
 import datetime
+import bcrypt
+import hashlib
 from typing import Annotated
-from pydantic import ValidationError
 
-from fastapi import HTTPException, APIRouter, Depends, Path, status, Request
+from fastapi import HTTPException, APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, ExpiredSignatureError, JWTError
 
@@ -19,9 +20,6 @@ from app.core.config_loader import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["users"])
-
-import bcrypt
-import hashlib
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl = "token")  # /token
@@ -173,50 +171,18 @@ async def get_users(
 
 @router.post("/token", response_model=dict)
 async def login(
-    request: Request,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> dict:
     """Authenticate a user and return an access token.
 
-    Accept either:
-    - OAuth2PasswordRequestForm (form-data with username and password)
-    - JSON body (UserIn with email and password)
+    Uses OAuth2PasswordRequestForm (form-data with username and password).
+    The username field should contain the user's email address.
     """
-    try:
-        # Try to parse as form-data first (OAuth2 standard)
-        content_type = request.headers.get("content-type", "")
-        if "application/x-www-form-urlencoded" in content_type:
-            form_data = await request.form()
-            username = form_data.get("username")
-            form_password = form_data.get("password")
-            if username and form_password:
-                email = username
-                password = form_password
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Missing username or password in form-data"
-                )
-        else:
-            # Try JSON
-            try:
-                data = await request.json()
-                user = UserIn(**data)
-                email = user.email
-                password = user.password
-            except (ValidationError, ValueError, KeyError) as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid JSON body. Provide email and password fields"
-                ) from e
+    email = form_data.username
+    password = form_data.password
 
-        logger.info("Checking authentication of user", extra={"email": email})
-        await authenticate_user(session=session, email=email, password=password)
-        access_token = create_access_token(email=email)
-        return {"access_token": access_token, "token_type": "bearer"}
-    except HTTPException:
-        # Re-raise HTTPException so FastAPI can handle it properly
-        raise
-    except Exception as e:
-        logger.error(f"Error, due to: {e}", exc_info=True)
-        raise
+    logger.info("Checking authentication of user", extra={"email": email})
+    await authenticate_user(session=session, email=email, password=password)
+    access_token = create_access_token(email=email)
+    return {"access_token": access_token, "token_type": "bearer"}
