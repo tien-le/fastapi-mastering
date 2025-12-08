@@ -451,3 +451,5 @@ If it's missing or incorrect, the token endpoint will typically fail or return a
 
 The grant_type tells the authorization server which OAuth2 flow is being used.
 If it's missing, the server won't know how to process the request and the token endpoint will fail.
+
+
