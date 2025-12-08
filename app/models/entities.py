@@ -20,7 +20,7 @@ class UserPostIn(BaseModel):
     )
 
 
-class UserPost(BaseModel):
+class UserPost(UserPostIn):
     """Output model for a post.
 
     Attributes:
@@ -29,7 +29,6 @@ class UserPost(BaseModel):
     """
 
     id: int = Field(..., gt=0, description="Unique identifier for the post")
-    body: str = Field(..., description="The content of the post")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -63,7 +62,7 @@ class CommentIn(BaseModel):
     )
 
 
-class Comment(BaseModel):
+class Comment(CommentIn):
     """Output model for a comment.
 
     Attributes:
@@ -73,8 +72,6 @@ class Comment(BaseModel):
     """
 
     id: int = Field(..., gt=0, description="Unique identifier for the comment")
-    body: str = Field(..., description="The content of the comment")
-    post_id: int = Field(..., gt=0, description="The ID of the post this comment belongs to")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -116,3 +113,37 @@ class UserPostWithComments(BaseModel):
             }
         }
     )
+
+
+class User(BaseModel):
+    """Output model for an user"""
+    id: int = Field(..., gt=0, description="Unique identifier for user")
+    email: str = Field(..., description="Email of user")
+
+    model_config = ConfigDict(
+        from_attributes = True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "email": "test_email@gmail.com",
+            }
+        }
+    )
+
+
+class UserIn(User):
+    """User model"""
+    password: str = Field(..., description="Password of user")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "email": "test_email@gmail.com",
+                "password": "test_password",
+            }
+        }
+    )
+
+
+

@@ -10,10 +10,12 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import DevConfig
 from app.core.config_loader import settings
+from app.core.config_logging import configure_logging
 from app.core.database import engine
-from app.core.logging_config import configure_logging
 from app.models.orm import Base
+
 from app.routers.post import router as post_router
+from app.routers.user import router as user_router
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Note: Table creation should be replaced with Alembic migrations in production.
     """
     configure_logging()
-    logger.info("Application starting up...")
+    logger.info("Application starting up...", extra={"email": "test_email@gmail.com"})
 
     # Auto-create tables in local development to speed up iteration.
     # This should NOT be used in production; prefer Alembic migrations.
@@ -65,6 +67,7 @@ app.add_middleware(CorrelationIdMiddleware)
 
 # Routers
 app.include_router(post_router)
+app.include_router(user_router)
 
 
 @app.get("/", response_model=dict[str, str])

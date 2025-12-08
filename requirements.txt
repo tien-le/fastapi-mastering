@@ -3,6 +3,7 @@ fastapi[standard]
 httpx
 pytest
 pytest-asyncio
+pytest-mock
 pydantic
 pydantic-settings
 mypy
@@ -14,3 +15,9 @@ mypy
 aiosqlite
 rich
 asgi-correlation-id
+python-json-logger
+loguru
+logtail-python
+python-jose
+python-multipart
+bcrypt

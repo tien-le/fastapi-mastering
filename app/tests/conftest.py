@@ -1,8 +1,9 @@
 """Test configuration and fixtures."""
 import os
+import logging
 from typing import AsyncGenerator, Generator
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import pytest
@@ -14,7 +15,9 @@ os.environ["ENV_STATE"] = "test"
 from app.core.config_loader import settings
 from app.core.database import get_async_session
 from app.main import app
-from app.models.orm import Base, Comment, Post
+from app.models.orm import Base, Comment, Post, User as UserORM
+
+logger = logging.getLogger(__name__)
 
 # ------------------------------------------
 # TEST DATABASE CONFIG
@@ -59,6 +62,7 @@ async def clean_database():
         # Delete in reverse order of foreign key dependencies
         await session.execute(delete(Comment))
         await session.execute(delete(Post))
+        await session.execute(delete(UserORM))
         await session.commit()
 
     yield
@@ -67,6 +71,7 @@ async def clean_database():
     async with AsyncSessionTest() as session:
         await session.execute(delete(Comment))
         await session.execute(delete(Post))
+        await session.execute(delete(UserORM))
         await session.commit()
 
 
@@ -115,3 +120,19 @@ async def async_client(client) -> AsyncGenerator:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url=client.base_url) as ac:
         yield ac
+
+
+# @pytest.fixture()
+# async def registered_user(async_client: AsyncClient) -> dict:
+#     user_details = {"email": "test@host.com", "password": "123456"}
+#     await async_client.post("/register", json=user_details)
+
+#     async with AsyncSessionTest() as session:
+#         query = select(UserORM).where(UserORM.email==user_details["email"])
+#         result = await session.execute(query)
+#         user = result.scalar_one_or_none()
+#         if user:
+#             user_details["id"] = user.id
+#         else:
+#             logger.debug(f"User Not Found with email: {user_details["email"]}")
+#     return user_details

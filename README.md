@@ -245,3 +245,143 @@ collected 8 items
 
 app/tests/routers/test_post.py ........
 ```
+
+# LogTail
+
+https://betterstack.com/docs/logs/python/#logging-from-python
+
+```bash
+$ uv pip install logtail-python
+
+# https://betterstack.com/docs/logs/collector/?collector=55052&source=1620699
+
+export COLLECTOR_SECRET=LeyThJyDskkCUSpMQPHvaSbyZhtxu7qn
+
+echo $COLLECTOR_SECRET
+
+curl -sSL https://raw.githubusercontent.com/BetterStackHQ/collector/main/install.sh | \
+  COLLECTOR_SECRET="$COLLECTOR_SECRET" bash
+
+docker run --rm --privileged alpine:latest sh -c "apk add --no-cache bash wget -q && \
+  wget -qO- https://telemetry.betterstack.com/api/collector/public/ebpf.sh | bash"
+```
+
+# HTTP Status
+
+FastAPI exposes **HTTP status code constants** from **Starlette**, all defined in `starlette.status`.
+
+```python
+from starlette.status import *
+
+# or
+
+from fastapi import status
+```
+
+Here is the **complete, organized list** of all `HTTP_XXX_...` constants available.
+
+# ✅ **Informational (1xx)**
+
+```python
+HTTP_100_CONTINUE
+HTTP_101_SWITCHING_PROTOCOLS
+HTTP_102_PROCESSING
+HTTP_103_EARLY_HINTS
+```
+
+# ✅ **Success (2xx)**
+
+```python
+HTTP_200_OK
+HTTP_201_CREATED
+HTTP_202_ACCEPTED
+HTTP_203_NON_AUTHORITATIVE_INFORMATION
+HTTP_204_NO_CONTENT
+HTTP_205_RESET_CONTENT
+HTTP_206_PARTIAL_CONTENT
+HTTP_207_MULTI_STATUS
+HTTP_208_ALREADY_REPORTED
+HTTP_226_IM_USED
+```
+
+# ✅ **Redirection (3xx)**
+
+```python
+HTTP_300_MULTIPLE_CHOICES
+HTTP_301_MOVED_PERMANENTLY
+HTTP_302_FOUND
+HTTP_303_SEE_OTHER
+HTTP_304_NOT_MODIFIED
+HTTP_305_USE_PROXY
+HTTP_306_RESERVED
+HTTP_307_TEMPORARY_REDIRECT
+HTTP_308_PERMANENT_REDIRECT
+```
+
+# ❌ **Client Error (4xx)**
+
+```python
+HTTP_400_BAD_REQUEST
+HTTP_401_UNAUTHORIZED
+HTTP_402_PAYMENT_REQUIRED
+HTTP_403_FORBIDDEN
+HTTP_404_NOT_FOUND
+HTTP_405_METHOD_NOT_ALLOWED
+HTTP_406_NOT_ACCEPTABLE
+HTTP_407_PROXY_AUTHENTICATION_REQUIRED
+HTTP_408_REQUEST_TIMEOUT
+HTTP_409_CONFLICT
+HTTP_410_GONE
+HTTP_411_LENGTH_REQUIRED
+HTTP_412_PRECONDITION_FAILED
+HTTP_413_REQUEST_ENTITY_TOO_LARGE
+HTTP_414_REQUEST_URI_TOO_LONG
+HTTP_415_UNSUPPORTED_MEDIA_TYPE
+HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE
+HTTP_417_EXPECTATION_FAILED
+HTTP_418_IM_A_TEAPOT
+HTTP_421_MISDIRECTED_REQUEST
+HTTP_422_UNPROCESSABLE_ENTITY
+HTTP_423_LOCKED
+HTTP_424_FAILED_DEPENDENCY
+HTTP_425_TOO_EARLY
+HTTP_426_UPGRADE_REQUIRED
+HTTP_428_PRECONDITION_REQUIRED
+HTTP_429_TOO_MANY_REQUESTS
+HTTP_431_REQUEST_HEADER_FIELDS_TOO_LARGE
+HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS
+```
+
+# 💥 **Server Error (5xx)**
+
+```python
+HTTP_500_INTERNAL_SERVER_ERROR
+HTTP_501_NOT_IMPLEMENTED
+HTTP_502_BAD_GATEWAY
+HTTP_503_SERVICE_UNAVAILABLE
+HTTP_504_GATEWAY_TIMEOUT
+HTTP_505_HTTP_VERSION_NOT_SUPPORTED
+HTTP_506_VARIANT_ALSO_NEGOTIATES
+HTTP_507_INSUFFICIENT_STORAGE
+HTTP_508_LOOP_DETECTED
+HTTP_510_NOT_EXTENDED
+HTTP_511_NETWORK_AUTHENTICATION_REQUIRED
+```
+
+---
+
+# ✔️ Quick example
+
+```python
+from fastapi import FastAPI, HTTPException, status
+
+app = FastAPI()
+
+@app.get("/item/{id}")
+def get_item(id: int):
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Item not found"
+    )
+```
+

@@ -1,11 +1,6 @@
 """SQLAlchemy ORM models using SQLAlchemy 2.0 style."""
-from typing import TYPE_CHECKING
-
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
 
 
 class Base(DeclarativeBase):
@@ -57,3 +52,14 @@ class Comment(Base):
 
     # Relationships
     post: Mapped["Post"] = relationship("Post", back_populates="comments", lazy="joined")
+
+
+class User(Base):
+    """User model
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
+    password: Mapped[str | None] = mapped_column(String)

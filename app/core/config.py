@@ -79,6 +79,8 @@ class GlobalConfig(BaseConfig):
         default=False, description="Force rollback after each request (for testing)"
     )
 
+    LOGTAIL_API_KEY: str | None = None
+
     @computed_field
     @property
     def server_host(self) -> str:
