@@ -29,6 +29,7 @@ class UserPost(UserPostIn):
     """
 
     id: int = Field(..., gt=0, description="Unique identifier for the post")
+    user_id: int = Field(..., gt=0, description="Unique identifier for user")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -72,6 +73,7 @@ class Comment(CommentIn):
     """
 
     id: int = Field(..., gt=0, description="Unique identifier for the comment")
+    user_id: int = Field(..., gt=0, description="Unique identifier for user")
 
     model_config = ConfigDict(
         from_attributes=True,

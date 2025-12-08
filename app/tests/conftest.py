@@ -122,17 +122,24 @@ async def async_client(client) -> AsyncGenerator:
         yield ac
 
 
-# @pytest.fixture()
-# async def registered_user(async_client: AsyncClient) -> dict:
-#     user_details = {"email": "test@host.com", "password": "123456"}
-#     await async_client.post("/register", json=user_details)
+@pytest.fixture()
+async def registered_user(async_client: AsyncClient) -> dict:
+    """Create a test user and return its data."""
+    body = {
+        "id": 123,
+        "email": "test@host.com",
+        "password": "123456"
+    }
+    # Store plain password for tests - register endpoint will hash it
+    plain_password = body["password"]
+    response = await async_client.post("/register", json=body)
+    assert response.status_code == 201
+    # Return body with plain password so tests can use it for authentication
+    body["password"] = plain_password
+    return body
 
-#     async with AsyncSessionTest() as session:
-#         query = select(UserORM).where(UserORM.email==user_details["email"])
-#         result = await session.execute(query)
-#         user = result.scalar_one_or_none()
-#         if user:
-#             user_details["id"] = user.id
-#         else:
-#             logger.debug(f"User Not Found with email: {user_details["email"]}")
-#     return user_details
+# Authentization
+@pytest.fixture()
+async def logged_in_token(async_client: AsyncClient, registered_user: dict) -> str:
+    response = await async_client.post("/token", json=registered_user)
+    return response.json()["access_token"]

@@ -2,7 +2,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status, Depends, Path
+from fastapi import APIRouter, HTTPException, status, Depends, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -13,8 +13,11 @@ from app.models.entities import (
     Comment,
     CommentIn,
     UserPostWithComments,
+    User,
+    UserIn
 )
-from app.models.orm import Post, Comment as CommentORM
+from app.models.orm import Post, Comment as CommentORM, User as UserORM
+from app.routers.user import oauth2_scheme, get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +79,17 @@ def _convert_comment_to_entity(comment: CommentORM) -> Comment:
 async def create_post(
     post: UserPostIn,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[UserIn, Depends(get_current_user)]
+    # request: Request
 ) -> UserPost:
     """Create a new post."""
     logger.info(f"Creating new post with body length: {len(post.body)}")
-    new_post = Post(**post.model_dump())
+
+    # token = await oauth2_scheme(request)
+    # current_user = await get_current_user(session=session, token=token)
+    logger.info(f"Got current user: {current_user}")
+
+    new_post = Post(**post.model_dump(), user_id=current_user.id)
     session.add(new_post)
     await session.commit()
     await session.refresh(new_post)
@@ -132,9 +142,15 @@ async def get_comments(
 async def create_comment(
     comment: CommentIn,
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[UserIn, Depends(get_current_user)]
+    # request: Request
 ) -> Comment:
     """Create a new comment for a post."""
     logger.info(f"Creating comment for post_id={comment.post_id}")
+
+    # token = await oauth2_scheme(request)
+    # current_user = await get_current_user(session=session, token=token)
+    logger.info(f"Got current user: {current_user}")
 
     # Validate post exists
     post = await _find_post(session, comment.post_id)
@@ -145,7 +161,7 @@ async def create_comment(
             detail=f"Post with id={comment.post_id} not found",
         )
 
-    new_comment = CommentORM(**comment.model_dump())
+    new_comment = CommentORM(**comment.model_dump(), user_id=current_user.id)
     session.add(new_comment)
     await session.commit()
     await session.refresh(new_comment)

@@ -22,6 +22,8 @@ class Post(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     body: Mapped[str | None] = mapped_column(String, nullable=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     # Relationships
     comments: Mapped[list["Comment"]] = relationship(
@@ -48,6 +50,9 @@ class Comment(Base):
     body: Mapped[str | None] = mapped_column(String, nullable=True)
     post_id: Mapped[int] = mapped_column(
         ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
 
     # Relationships

@@ -179,6 +179,49 @@ INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
 
 ```
 
+## After adding ForeignKey into Tables ORM
+```bash
+
+# B1: Autogenerate the migration
+# Alembic will inspect model metadata and emit a new migration file.
+$ alembic revision --autogenerate -m "add user_id FK to comments/posts"
+
+# B2: Fix the migration for SQLite (no ALTER CONSTRAINT support)
+# Wrap table changes in op.batch_alter_table(..., recreate="always")
+with op.batch_alter_table("comments", recreate="always") as batch:
+    batch.add_column(sa.Column("user_id", sa.Integer(), nullable=False))
+    batch.create_foreign_key("fk_comments_user_id_users", "users", ["user_id"], ["id"], ondelete="CASCADE")
+
+# B3: Do the same for other affected tables (posts)
+
+# B4: delete the local SQLite DB (e.g., rm local.db) to start clean.
+
+# B5: Run the migration
+$ alembic upgrade head
+
+# B: Downgrade path
+# Mirror the batch pattern in downgrade() so rollbacks also work on SQLite.
+
+# B: Verify
+# Inspect the schema (PRAGMA table_info(...) / PRAGMA foreign_key_list(...) in SQLite) to confirm the FK and indexes exist.
+
+### Full flow: update models → autogenerate → adjust migration for SQLite batch mode → ensure data compatibility → alembic upgrade head → verify.
+```
+
+## Another solution
+```bash
+Quickest (if you can lose data):
+    Delete the SQLite file and rerun:
+        rm local.db (or whatever DB file you’re using)
+        alembic upgrade head
+
+If you need to keep the DB contents:
+    Drop the stray temp table, then rerun:
+        sqlite3 local.db 'DROP TABLE IF EXISTS _alembic_tmp_comments;'
+        alembic downgrade f6fa61e85818
+        alembic upgrade head
+```
+
 # Logging module
 
 Logger --one or more--> Handler --one--> Formatter
@@ -280,7 +323,7 @@ from fastapi import status
 
 Here is the **complete, organized list** of all `HTTP_XXX_...` constants available.
 
-# ✅ **Informational (1xx)**
+## ✅ **Informational (1xx)**
 
 ```python
 HTTP_100_CONTINUE
@@ -289,7 +332,7 @@ HTTP_102_PROCESSING
 HTTP_103_EARLY_HINTS
 ```
 
-# ✅ **Success (2xx)**
+## ✅ **Success (2xx)**
 
 ```python
 HTTP_200_OK
@@ -304,7 +347,7 @@ HTTP_208_ALREADY_REPORTED
 HTTP_226_IM_USED
 ```
 
-# ✅ **Redirection (3xx)**
+## ✅ **Redirection (3xx)**
 
 ```python
 HTTP_300_MULTIPLE_CHOICES
@@ -318,7 +361,7 @@ HTTP_307_TEMPORARY_REDIRECT
 HTTP_308_PERMANENT_REDIRECT
 ```
 
-# ❌ **Client Error (4xx)**
+## ❌ **Client Error (4xx)**
 
 ```python
 HTTP_400_BAD_REQUEST
@@ -352,7 +395,7 @@ HTTP_431_REQUEST_HEADER_FIELDS_TOO_LARGE
 HTTP_451_UNAVAILABLE_FOR_LEGAL_REASONS
 ```
 
-# 💥 **Server Error (5xx)**
+## 💥 **Server Error (5xx)**
 
 ```python
 HTTP_500_INTERNAL_SERVER_ERROR
@@ -370,7 +413,7 @@ HTTP_511_NETWORK_AUTHENTICATION_REQUIRED
 
 ---
 
-# ✔️ Quick example
+## ✔️ Quick example
 
 ```python
 from fastapi import FastAPI, HTTPException, status
@@ -385,3 +428,16 @@ def get_item(id: int):
     )
 ```
 
+# OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
+
+```python
+form: OAuth2PasswordRequestForm = Depends()
+vs
+form: Annotated[OAuth2PasswordRequestForm, Depends()]
+```
+
+Both mean:
++ "Inject an instance of OAuth2PasswordRequestForm using Depends()"
++ The request must be application/x-www-form-urlencoded
++ FastAPI will parse fields: username, password, scope, client_id, client_secret

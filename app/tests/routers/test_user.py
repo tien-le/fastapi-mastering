@@ -7,34 +7,14 @@ from jose import jwt
 
 from sqlalchemy import select
 
-from app.routers.user import get_user, register
+from app.routers.user import get_user, register, create_access_token, get_password_hash, verify_password, get_current_user, authenticate_user
 from app.tests.conftest import AsyncSessionTest
 from app.models.orm import User as UserORM
 from app.models.entities import UserIn
-from app.routers.user import get_password_hash, verify_password, create_access_token, get_current_user
 from app.core.config_loader import settings
 
 
 logger = logging.getLogger(__name__)
-
-
-
-
-@pytest.fixture()
-async def registered_user(async_client: AsyncClient) -> dict:
-    """Create a test user and return its data."""
-    body = {
-        "id": 123,
-        "email": "test@host.com",
-        "password": "123456"
-    }
-    # Store plain password for tests - register endpoint will hash it
-    plain_password = body["password"]
-    response = await async_client.post("/register", json=body)
-    assert response.status_code == 201
-    # Return body with plain password so tests can use it for authentication
-    body["password"] = plain_password
-    return body
 
 
 # User Tests
@@ -124,8 +104,6 @@ async def test_create_access_token():
         algorithms=[settings.JWT_ALGORITHM]).items()
 
 
-from app.routers.user import authenticate_user
-
 @pytest.mark.anyio
 async def test_authenticate_user(registered_user: dict):
     async with AsyncSessionTest() as session:
@@ -155,3 +133,19 @@ async def test_get_current_user(registered_user: dict):
     async with AsyncSessionTest() as session:
         user = await get_current_user(session=session, token=token)
         assert user.email == registered_user["email"]
+
+@pytest.mark.anyio
+async def test_get_current_user_invalid_token():
+    async with AsyncSessionTest() as session:
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(session=session, token="invalid-token")
+        assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# Authentization
+@pytest.fixture()
+async def logged_in_token(async_client: AsyncClient, registered_user: dict) -> str:
+    response = await async_client.post("/token", json=registered_user)
+    return response.json()["access_token"]
+
+
