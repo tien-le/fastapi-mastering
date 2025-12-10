@@ -1,10 +1,14 @@
 """Application configuration using Pydantic Settings."""
+import logging
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
 from pydantic import AnyUrl, BeforeValidator, Field, computed_field
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+logger = logging.getLogger(__name__)
 
 
 def parse_cors(v: Any) -> list[str] | str:
@@ -128,6 +132,7 @@ class GlobalConfig(BaseConfig):
                 self.POSTGRESQL_DATABASE,
             ]
         ):
+            logger.debug("Using sqlite in local.db")
             return "sqlite+aiosqlite:///./local.db"
 
         return str(
@@ -156,20 +161,21 @@ class GlobalConfig(BaseConfig):
 # Environment-Specific
 # ---------------------------------------------------------
 class DevConfig(GlobalConfig):
-    model_config = SettingsConfigDict(env_prefix="DEV_")
+    model_config = SettingsConfigDict(env_prefix="DEV_", extra="ignore")
     DB_FORCE_ROLLBACK: bool = False
 
 
 class ProdConfig(GlobalConfig):
-    model_config = SettingsConfigDict(env_prefix="PROD_")
+    model_config = SettingsConfigDict(env_prefix="PROD_", extra="ignore")
 
 
 class TestConfig(GlobalConfig):
-    model_config = SettingsConfigDict(env_prefix="TEST_")
+    model_config = SettingsConfigDict(env_prefix="TEST_", extra="ignore")
     DB_FORCE_ROLLBACK: bool = True
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        logger.debug("Using sqlite in test.db")
         return "sqlite+aiosqlite:///./test.db"
 
 
