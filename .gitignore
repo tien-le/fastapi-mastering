@@ -12,3 +12,8 @@ wheels/
 .env
 
 docs/
+
+test.db
+local.db
+
+var/

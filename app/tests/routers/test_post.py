@@ -1,6 +1,7 @@
 """Tests for post and comment endpoints."""
 import pytest
 from httpx import AsyncClient
+from fastapi import status
 
 
 # Fixtures
@@ -29,9 +30,33 @@ async def created_comment(async_client: AsyncClient, created_post: dict, logged_
     return response.json()
 
 
+@pytest.fixture()
+async def created_like_post(async_client: AsyncClient, created_post: dict, logged_in_token: str) -> dict:
+    response = await async_client.post(
+        "/like",
+        json={"post_id": created_post["id"]},
+        headers={"Authorization": f"Bearer {logged_in_token}"}
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+@pytest.mark.anyio
+async def test_like_post(async_client: AsyncClient, created_post: dict, logged_in_token: str):
+    response = await async_client.post(
+        "/like",
+        json={"post_id": created_post["id"]},
+        headers={"Authorization": f"Bearer {logged_in_token}"}
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    like_posts = response.json()
+    assert isinstance(like_posts, dict)
+    assert len(like_posts) >= 1
+
+
 # Post Tests
 @pytest.mark.anyio
-async def test_create_post(async_client: AsyncClient, registered_user: dict, logged_in_token: str):
+async def test_create_post(async_client: AsyncClient, confirmed_user: dict, logged_in_token: str):
     """Test creating a new post."""
     body = "Test Post"
     response = await async_client.post("/post", json={"body": body}, headers={"Authorization": f"Bearer {logged_in_token}"})
@@ -41,7 +66,7 @@ async def test_create_post(async_client: AsyncClient, registered_user: dict, log
     assert data["body"] == body
     assert "id" in data
     assert isinstance(data["id"], int)
-    assert data["user_id"] == registered_user["id"]
+    assert data["user_id"] == confirmed_user["id"]
 
 
 @pytest.mark.anyio
@@ -80,6 +105,188 @@ async def test_get_all_posts(async_client: AsyncClient, created_post: dict, logg
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "sorting, expected_order",
+    [
+        ("new", [2, 1]),
+        ("old", [1, 2]),
+        ("most_likes", [1, 2])
+    ]
+)
+async def test_get_all_posts_sorting(
+    async_client: AsyncClient,
+    logged_in_token: str,
+    sorting: str,
+    expected_order: list[int],
+):
+    """Test getting all posts with different sorting options."""
+    headers = {"Authorization": f"Bearer {logged_in_token}"}
+
+    # Create two new posts
+    response1 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 1"},
+        headers=headers
+    )
+    assert response1.status_code == status.HTTP_201_CREATED
+
+    response2 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 2"},
+        headers=headers
+    )
+    assert response2.status_code == status.HTTP_201_CREATED
+
+    response3 = await async_client.post(
+        "/like",
+        json={"post_id": 1},
+        headers=headers
+    )
+    assert response3.status_code == status.HTTP_201_CREATED
+
+    # Get all posts with specified sorting
+    response = await async_client.get(
+        "/posts",
+        params={"sorting": sorting},
+        headers=headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    # Filter out the fixture post and extract IDs
+    posts = response.json()
+    post_ids = [post["id"] for post in posts]
+
+    # Verify the order matches expected sorting
+    assert post_ids == expected_order
+
+
+@pytest.mark.anyio
+async def test_get_all_posts_sorting_new(async_client: AsyncClient, logged_in_token: str):
+    """Test getting all posts sorted by newest first."""
+    headers = {"Authorization": f"Bearer {logged_in_token}"}
+
+    # Create two new posts
+    response1 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 1"},
+        headers=headers
+    )
+    assert response1.status_code == status.HTTP_201_CREATED
+
+    response2 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 2"},
+        headers=headers
+    )
+    assert response2.status_code == status.HTTP_201_CREATED
+
+    # Get all posts sorted by newest first
+    response = await async_client.get(
+        "/posts",
+        params={"sorting": "new"},
+        headers=headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    # Filter out the fixture post and extract IDs
+    posts = response.json()
+    post_ids = [post["id"] for post in posts]
+
+    # Verify posts are sorted newest first (descending ID order)
+    assert post_ids == [2, 1]
+
+
+@pytest.mark.anyio
+async def test_get_all_posts_sorting_old(async_client: AsyncClient, logged_in_token: str):
+    """Test getting all posts sorted by oldest first."""
+    headers = {"Authorization": f"Bearer {logged_in_token}"}
+
+    # Create two new posts
+    response1 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 1"},
+        headers=headers
+    )
+    assert response1.status_code == status.HTTP_201_CREATED
+
+    response2 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 2"},
+        headers=headers
+    )
+    assert response2.status_code == status.HTTP_201_CREATED
+
+    # Get all posts sorted by oldest first
+    response = await async_client.get(
+        "/posts",
+        params={"sorting": "old"},
+        headers=headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    # Filter out the fixture post and extract IDs
+    posts = response.json()
+    post_ids = [post["id"] for post in posts]
+
+    # Verify posts are sorted oldest first (ascending ID order)
+    assert post_ids == [1, 2]
+
+
+@pytest.mark.anyio
+async def test_get_all_posts_sorting_most_likes(async_client: AsyncClient, logged_in_token: str):
+    """Test getting all posts sorted by most likes."""
+    headers = {"Authorization": f"Bearer {logged_in_token}"}
+
+    # Create two new posts
+    response1 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 1"},
+        headers=headers
+    )
+    assert response1.status_code == status.HTTP_201_CREATED
+
+    response2 = await async_client.post(
+        "/post",
+        json={"body": "Test Post 2"},
+        headers=headers
+    )
+    assert response2.status_code == status.HTTP_201_CREATED
+
+    response3 = await async_client.post(
+        "/like",
+        json={"post_id": 1},
+        headers=headers
+    )
+    assert response3.status_code == status.HTTP_201_CREATED
+
+    response = await async_client.get(
+        "/posts",
+        params={"sorting": "most_likes"},
+        headers=headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+    # Filter out the fixture post and extract IDs
+    posts = response.json()
+    post_ids = [post["id"] for post in posts]
+
+    # Verify posts are sorted oldest first (ascending ID order)
+    assert post_ids == [1, 2]
+
+
+@pytest.mark.anyio
+async def test_get_all_posts_sorting_wrong(async_client: AsyncClient, logged_in_token: str):
+    headers = {"Authrization": f"Bearer {logged_in_token}"}
+
+    response = await async_client.get(
+        "/posts",
+        params={"sorting": "wrong_info"},
+        headers=headers
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+@pytest.mark.anyio
 async def test_get_post_with_comments_not_found(async_client: AsyncClient, logged_in_token: str):
     """Test getting a non-existent post with comments."""
     response = await async_client.get("/posts/99999", headers={"Authorization": f"Bearer {logged_in_token}"})
@@ -100,7 +307,7 @@ async def test_get_post_with_comments_empty(async_client: AsyncClient, created_p
 
 # Comment Tests
 @pytest.mark.anyio
-async def test_create_comment(async_client: AsyncClient, created_post: dict, registered_user:dict, logged_in_token: str):
+async def test_create_comment(async_client: AsyncClient, created_post: dict, confirmed_user:dict, logged_in_token: str):
     """Test creating a new comment."""
     body = "Test Comment"
     response = await async_client.post(
@@ -113,7 +320,7 @@ async def test_create_comment(async_client: AsyncClient, created_post: dict, reg
     assert data["post_id"] == created_post["id"]
     assert "id" in data
     assert isinstance(data["id"], int)
-    assert data["user_id"] == registered_user["id"]
+    assert data["user_id"] == confirmed_user["id"]
 
 
 @pytest.mark.anyio
@@ -146,7 +353,7 @@ async def test_create_comment_invalid_post_id(async_client: AsyncClient, logged_
 async def test_get_all_comments_empty(async_client: AsyncClient, logged_in_token: str):
     """Test getting all comments when none exist."""
     response = await async_client.get("/comments", headers={"Authorization": f"Bearer {logged_in_token}"})
-    assert response.status_code == 200
+    assert response.status_code == status.HTTP_200_OK
     assert response.json() == []
 
 
@@ -219,3 +426,5 @@ async def test_get_post_with_comments_negative_id(async_client: AsyncClient, log
     """Test getting a post with negative ID."""
     response = await async_client.get("/posts/-1", headers={"Authorization": f"Bearer {logged_in_token}"})
     assert response.status_code == 422  # Validation error for Path(gt=0)
+
+

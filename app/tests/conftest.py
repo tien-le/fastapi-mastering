@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import pytest
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from httpx import AsyncClient, ASGITransport
 
@@ -138,12 +139,34 @@ async def registered_user(async_client: AsyncClient) -> dict:
     body["password"] = plain_password
     return body
 
+
+@pytest.fixture()
+async def confirmed_user(registered_user: dict) -> dict:
+    print(f"registered_user: {registered_user}")
+    query = select(UserORM).where(UserORM.email==registered_user["email"])
+    async with AsyncSessionTest() as session:
+        result = await session.execute(query)
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized, user not found"
+            )
+
+        # Updated confirmation flag
+        user.confirmed = True
+        await session.commit()
+    return registered_user
+
+
 # Authentization
 @pytest.fixture()
-async def logged_in_token(async_client: AsyncClient, registered_user: dict) -> str:
+async def logged_in_token(async_client: AsyncClient, confirmed_user: dict) -> str:
     form_data = {
-        "username": registered_user["email"],
-        "password": registered_user["password"]
+        "username": confirmed_user["email"],
+        "password": confirmed_user["password"]
     }
     response = await async_client.post("/token", data=form_data)
     return response.json()["access_token"]
+
+

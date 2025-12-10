@@ -1,10 +1,11 @@
 """Post and comment router module using FastAPI, SQLAlchemy 2.0, and Pydantic 2.0."""
+from enum import Enum
 import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, status, Depends, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, desc, asc
 
 from app.core.database import get_async_session
 from app.models.entities import (
@@ -13,15 +14,25 @@ from app.models.entities import (
     Comment,
     CommentIn,
     UserPostWithComments,
+    UserPostWithLikes,
     User,
-    UserIn
+    UserIn,
+    PostLikeIn,
+    PostLike
 )
-from app.models.orm import Post, Comment as CommentORM, User as UserORM
+from app.models.orm import Post, Comment as CommentORM, User as UserORM, Like
 from app.routers.user import oauth2_scheme, get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["posts"])
+
+
+select_post_and_likes = (
+    select(Post, func.count(Like.id).label("likes"))
+    .outerjoin(Like, Like.post_id == Post.id)
+    .group_by(Post.id)
+)
 
 
 # Dependencies
@@ -53,7 +64,8 @@ async def get_post_by_id(
 # Utility functions
 async def _find_post(session: AsyncSession, post_id: int) -> Post | None:
     """Internal utility to find a post without raising exceptions."""
-    query = select(Post).where(Post.id == post_id)
+    # query = select(Post).where(Post.id == post_id)
+    query = select_post_and_likes.where(Post.id == post_id)
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
@@ -63,9 +75,25 @@ def _convert_post_to_entity(post: Post) -> UserPost:
     return UserPost.model_validate(post, from_attributes=True)
 
 
+def _convert_post_with_likes_to_entity(post: Post, likes: int) -> UserPostWithLikes:
+    """Convert ORM Post with likes count to Pydantic UserPostWithLikes entity."""
+    post_dict = {
+        "id": post.id,
+        "body": post.body,
+        "user_id": post.user_id,
+        "likes": likes
+    }
+    return UserPostWithLikes.model_validate(post_dict)
+
+
 def _convert_comment_to_entity(comment: CommentORM) -> Comment:
     """Convert ORM Comment to Pydantic Comment entity."""
     return Comment.model_validate(comment, from_attributes=True)
+
+
+def _convert_post_like_to_entity(post_like: Like) -> PostLike:
+    """Convert ORM Like to Pydantic PostLike entity."""
+    return PostLike.model_validate(post_like, from_attributes=True)
 
 
 # Post endpoints
@@ -97,6 +125,12 @@ async def create_post(
     return _convert_post_to_entity(new_post)
 
 
+class PostSorting(str, Enum):
+    new = "new"
+    old = "old"
+    most_likes = "most_likes"
+
+
 @router.get(
     "/posts",
     response_model=list[UserPost],
@@ -105,10 +139,24 @@ async def create_post(
 )
 async def get_posts(
     session: Annotated[AsyncSession, Depends(get_async_session)],
+    sorting: PostSorting = PostSorting.new
 ) -> list[UserPost]:
     """Get all posts."""
     logger.info("Fetching all posts")
-    result = await session.execute(select(Post))
+    # query = select(Post)
+    if sorting == PostSorting.new:
+        query = select_post_and_likes.order_by(desc(Post.id))
+    elif sorting == PostSorting.old:
+        query = select_post_and_likes.order_by(asc(Post.id))
+    elif sorting == PostSorting.most_likes:
+        query = select_post_and_likes.order_by(desc("likes"))
+    else:
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = "Missing information of sorting"
+        )
+
+    result = await session.execute(query)
     posts = result.scalars().all()
     logger.debug(f"Found {len(posts)} posts")
     return [_convert_post_to_entity(post) for post in posts]
@@ -195,21 +243,71 @@ async def get_comments_on_post(
     description="Retrieves a specific post along with all its comments",
 )
 async def get_post_with_comments(
-    post: Annotated[Post, Depends(get_post_by_id)],
+    post_id: Annotated[int, Path(gt=0, description="The ID of the post")],
     session: Annotated[AsyncSession, Depends(get_async_session)],
 ) -> UserPostWithComments:
     """Get a post with all its comments.
 
     Efficiently loads comments using SQLAlchemy 2.0 select query.
     """
-    logger.info(f"Fetching post with comments for post_id={post.id}")
+    logger.info(f"Fetching post with comments for post_id={post_id}")
+
+    # Query post with likes count
+    query = select_post_and_likes.where(Post.id == post_id)
+    result = await session.execute(query)
+    row = result.first()
+
+    if row is None:
+        logger.warning(f"Post with id={post_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id={post_id} not found",
+        )
+
+    # Unpack the Row object: (Post, likes_count)
+    post = row[0]
+    likes_count = row[1]
+    likes = likes_count or 0
 
     # Query comments for this post using SQLAlchemy 2.0 style
-    query = select(CommentORM).where(CommentORM.post_id == post.id).order_by(CommentORM.id)
-    result = await session.execute(query)
-    comment_rows = result.scalars().all()
+    comment_query = select(CommentORM).where(CommentORM.post_id == post_id).order_by(CommentORM.id)
+    comment_result = await session.execute(comment_query)
+    comment_rows = comment_result.scalars().all()
     comments = [_convert_comment_to_entity(comment) for comment in comment_rows]
-    logger.debug(f"Found {len(comments)} comments for post_id={post.id}")
+    logger.debug(f"Found {len(comments)} comments for post_id={post_id}")
     return UserPostWithComments(
-        post=_convert_post_to_entity(post), comments=comments
+        post=_convert_post_with_likes_to_entity(post, likes), comments=comments
     )
+
+
+@router.post(
+    "/like",
+    response_model=PostLike,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new post like",
+    description="Creates a like for a post"
+)
+async def like_post(
+    post_like: PostLikeIn,
+    session: Annotated[AsyncSession, Depends(get_async_session)],
+    current_user: Annotated[UserIn, Depends(get_current_user)]
+) -> PostLike:
+    """Creates a like for a post"""
+    logger.info(f"Creating a like for post_id: {post_like.post_id}")
+
+    logger.info(f"Got current user: {current_user}")
+
+    # Validate post exists
+    post = await _find_post(session, post_like.post_id)
+    if post is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post Not Found with post_id={post_like.post_id}"
+        )
+
+    new_post_like = Like(**post_like.model_dump(), user_id=current_user.id)
+    session.add(new_post_like)
+    await session.commit()
+    await session.refresh(new_post_like)
+    logger.debug(f"Created post like with id={new_post_like.id}")
+    return _convert_post_like_to_entity(new_post_like)

@@ -26,6 +26,13 @@ def parse_cors(v: Any) -> list[str] | str:
     raise ValueError(f"Invalid CORS format: {v}")
 
 
+def access_token_expire_minutes() -> int:
+    return settings.ACCESS_TOKEN_EXPIRE_MINUTES or 30
+
+def confirm_token_expire_minutes() -> int:
+    return settings.CONFIRM_TOKEN_EXPIRE_MINUTES or 60
+
+
 # ---------------------------------------------------------
 # Base
 # ---------------------------------------------------------
@@ -61,7 +68,10 @@ class GlobalConfig(BaseConfig):
     JWT_SECRET_KEY: str = Field(default="dev-key", description="JWT secret key")
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT algorithm")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=15, ge=1, description="Token expiration time in minutes"
+        default=30, ge=1, description="Token expiration time in minutes"
+    )
+    CONFIRM_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=60, ge=1, description="Confirm Token expiration time in minutes"
     )
 
     BACKEND_CORS_ORIGINS: Annotated[

@@ -37,6 +37,7 @@ class UserPost(UserPostIn):
             "example": {
                 "id": 1,
                 "body": "This is a sample post content",
+                "user_id": 1,
             }
         },
     )
@@ -82,6 +83,23 @@ class Comment(CommentIn):
                 "id": 1,
                 "body": "This is a sample comment",
                 "post_id": 1,
+                "user_id": 1,
+            }
+        },
+    )
+
+
+class UserPostWithLikes(UserPost):
+    likes: int = Field(..., ge=0, description="Number of likes")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "body": "This is a sample post content",
+                "user_id": 1,
+                "likes": 2
             }
         },
     )
@@ -95,7 +113,7 @@ class UserPostWithComments(BaseModel):
         comments: List of comments associated with the post
     """
 
-    post: UserPost = Field(..., description="The post data")
+    post: UserPostWithLikes = Field(..., description="The post data with likes")
     comments: list[Comment] = Field(default_factory=list, description="List of comments")
 
     model_config = ConfigDict(
@@ -104,6 +122,8 @@ class UserPostWithComments(BaseModel):
                 "post": {
                     "id": 1,
                     "body": "This is a sample post",
+                    "user_id": 1,
+                    "likes": 2
                 },
                 "comments": [
                     {
@@ -118,7 +138,12 @@ class UserPostWithComments(BaseModel):
 
 
 class User(BaseModel):
-    """Output model for an user"""
+    """Output model for an user
+
+    Attributes:
+        id: Unique identifier for user
+        email: Email of user
+    """
     id: int = Field(..., gt=0, description="Unique identifier for user")
     email: str = Field(..., description="Email of user")
 
@@ -134,7 +159,11 @@ class User(BaseModel):
 
 
 class UserIn(User):
-    """User model"""
+    """Input model for creating a new user.
+
+    Attributes:
+        password: Password of user
+    """
     password: str = Field(..., description="Password of user")
 
     model_config = ConfigDict(
@@ -148,4 +177,67 @@ class UserIn(User):
     )
 
 
+class UserRegistrationResponse(BaseModel):
+    """Response model for user registration.
 
+    Attributes:
+        id: Unique identifier for user
+        email: Email of user
+        detail: Registration message
+        confirmation_url: URL for email confirmation
+    """
+    id: int = Field(..., gt=0, description="Unique identifier for user")
+    email: str = Field(..., description="Email of user")
+    detail: str = Field(..., description="Registration message")
+    confirmation_url: str = Field(..., description="URL for email confirmation")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "email": "test_email@gmail.com",
+                "detail": "User created. Please confirm your email.",
+                "confirmation_url": "http://testserver/confirm/token123",
+            }
+        }
+    )
+
+
+
+class PostLikeIn(BaseModel):
+    """Input model for creating a new post like.
+
+    Attributes:
+        post_id: The ID of the post this comment belongs to
+    """
+    post_id: int = Field(..., gt=0, description="The ID of the post this comment belongs to")
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "post_id": 1,
+            }
+        }
+    )
+
+
+class PostLike(PostLikeIn):
+    """Output model for a post like.
+
+    Attributes:
+        id: Unique identifier for Post Like
+        user_id: Unique identifier for user
+        post_id: The ID of the post this comment belongs to
+    """
+    id: int = Field(..., gt=0, description="Unique identifier for Post Like")
+    user_id: int = Field(..., gt=0, description="Unique identifier for user")
+
+    model_config = ConfigDict(
+        from_attributes = True,
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "user_id": 1,
+                "post_id": 1,
+            }
+        }
+    )
