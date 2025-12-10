@@ -21,3 +21,5 @@ logtail-python
 python-jose
 python-multipart
 bcrypt
+asyncpg
+logtail-python

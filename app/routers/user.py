@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.orm import User as UserORM
 from app.models.entities import User, UserIn, UserRegistrationResponse
 
+from app.core.tasks import send_user_registration_email
 from app.core.database import get_async_session
 from app.core.config_loader import settings, access_token_expire_minutes, confirm_token_expire_minutes
 
@@ -174,14 +175,17 @@ async def register(
     session.add(new_user)
     await session.commit()
     await session.refresh(new_user)
+
+    confirmation_url = str(request.url_for(
+        "confirm_email", token=create_confirmation_token(new_user.email)
+    ))
+    await send_user_registration_email(email=new_user.email, confirmation_url=confirmation_url)
     logger.debug(f"Created user with id={new_user.id}")
     return UserRegistrationResponse(
         id=new_user.id,
         email=new_user.email,
         detail="User created. Please confirm your email.",
-        confirmation_url=str(request.url_for(
-            "confirm_email", token=create_confirmation_token(new_user.email)
-        ))
+        confirmation_url=confirmation_url
     )
 
 
@@ -249,5 +253,6 @@ async def confirm_email(
     # await session.commit()
 
     return {"detail": "User confirmed"}
+
 
 

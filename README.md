@@ -452,3 +452,31 @@ If it's missing or incorrect, the token endpoint will typically fail or return a
 The grant_type tells the authorization server which OAuth2 flow is being used.
 If it's missing, the server won't know how to process the request and the token endpoint will fail.
 
+# docker command - test alembic
+```bash
+cd fastapi-mastering && docker run --rm --network fastapi-mastering_backend -v "$(pwd):/app" -w /app -e ENV_STATE=dev -e DEV_POSTGRESQL_USERNAME=admin -e DEV_POSTGRESQL_PASSWORD="Admin123!" -e DEV_POSTGRESQL_SERVER=pg -e DEV_POSTGRESQL_PORT=5432 -e DEV_POSTGRESQL_DATABASE=quiz_db python:3.12 bash -c "pip install -q -r requirements.txt && python -m alembic upgrade head" 2>&1
+```
+
+# MailGun
+
+https://documentation.mailgun.com/docs/mailgun/quickstart
+
+## Add Authorized Recipient
+
+```bash
+curl -X POST \
+  "https://api.mailgun.net/v5/sandbox/auth_recipients?email=your-email@example.com" \
+  --user 'api:YOUR_API_KEY'
+```
+
+## Send Your First Email
+
+```bash
+curl --user 'api:f14d458ed13199343b7b4b825538e002-04af4ed8-xxx' \
+  https://api.mailgun.net/v3/xxx.mailgun.org/messages \
+  -F from='Test <postmaster@xxx.mailgun.org>' \
+  -F to='my-email.dev@gmail.com' \
+  -F subject='Hello!' \
+  -F text='Test message'
+
+```

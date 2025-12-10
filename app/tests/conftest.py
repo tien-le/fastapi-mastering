@@ -2,6 +2,7 @@
 import os
 import logging
 from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, patch
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -97,6 +98,19 @@ def apply_overrides(override_get_session):
 
 
 # ------------------------------------------
+# Mock email sending for tests
+# ------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def mock_email_sending():
+    """Mock email sending functions to avoid actual email delivery in tests."""
+    with patch("app.routers.user.send_user_registration_email", new_callable=AsyncMock) as mock:
+        mock.return_value = {"message": "Email sent (mocked)"}
+        yield mock
+
+
+# ------------------------------------------
 # Sync TestClient (for non-async tests)
 # ------------------------------------------
 
@@ -168,5 +182,6 @@ async def logged_in_token(async_client: AsyncClient, confirmed_user: dict) -> st
     }
     response = await async_client.post("/token", data=form_data)
     return response.json()["access_token"]
+
 
 

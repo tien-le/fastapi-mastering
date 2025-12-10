@@ -74,6 +74,10 @@ class GlobalConfig(BaseConfig):
         default=60, ge=1, description="Confirm Token expiration time in minutes"
     )
 
+    # MailGun
+    MAILGUN_API_KEY: str | None = None
+    MAILGUN_DOMAIN: str | None = None
+
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str,
         BeforeValidator(parse_cors),

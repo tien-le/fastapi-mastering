@@ -16,9 +16,6 @@ logger = logging.getLogger(__name__)
 # Create async engine with optimized settings
 engine = create_async_engine(
     str(settings.SQLALCHEMY_DATABASE_URI),
-    echo=False,  # Set to True for SQL query logging
-    poolclass=NullPool if "sqlite" in str(settings.SQLALCHEMY_DATABASE_URI) else QueuePool,
-    pool_pre_ping=True,  # Verify connections before using
     future=True,  # Use SQLAlchemy 2.0 style
 )
 

@@ -8,6 +8,7 @@ from jose import jwt
 from sqlalchemy import select
 
 from app.routers.user import get_user, register, create_access_token, get_password_hash, verify_password, get_current_user, authenticate_user, create_confirmation_token, get_subject_for_token_type
+from app.routers import user as user_router
 from app.tests.conftest import AsyncSessionTest
 from app.models.orm import User as UserORM
 from app.models.entities import UserIn
@@ -57,7 +58,8 @@ async def test_register_user_already_exists(async_client: AsyncClient, confirmed
 
 @pytest.mark.anyio
 async def test_confirm_user(async_client: AsyncClient, mocker):
-    spy = mocker.spy(Request, "url_for")
+    # spy = mocker.spy(Request, "url_for")
+    spy = mocker.spy(user_router, "send_user_registration_email")
 
     body = {
         "id": 123,
@@ -66,7 +68,8 @@ async def test_confirm_user(async_client: AsyncClient, mocker):
     }
     response = await async_client.post("/register", json=body)
 
-    confirmation_url = str(spy.spy_return)
+    # confirmation_url = str(spy.spy_return)
+    confirmation_url = str(spy.call_args[1]["confirmation_url"])
     print(f"confirmation_url: {confirmation_url}")
     response1 = await async_client.get(confirmation_url)
 
