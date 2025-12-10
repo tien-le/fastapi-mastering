@@ -146,8 +146,8 @@ async def send_user_registration_email(email: str, confirmation_url: str):
     )
 
     html_body = f"""
-    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto;">
-        <h2 style="color: #444;">Pleased to meet you!</h2>
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; box-sizing: border-box;">
+        <h2 style="color: #444; text-align: center;">Pleased to meet you!</h2>
 
         <p>Hi {email},</p>
 
@@ -155,24 +155,28 @@ async def send_user_registration_email(email: str, confirmation_url: str):
 
         <div style="text-align: center; margin: 30px 0;">
             <a href="{confirmation_url}"
-               style="
+            role="button"
+            aria-label="Verify your email address"
+            style="
                     background-color: #4F46E5;
                     padding: 14px 24px;
-                    color: white;
+                    color: #ffffff;
                     text-decoration: none;
                     border-radius: 6px;
                     font-weight: bold;
                     display: inline-block;
-               ">
+            ">
                 Verify email address
             </a>
         </div>
 
-        <p><strong>Need help getting started?</strong></p>
+        <p style="font-weight: bold;">Need help getting started?</p>
         <p>
-            Check out our help page for guides, FAQs and documentation.
+            Check out our help page for guides, FAQs, and documentation.
             If you need anything, just reach out — we’ll reply in record time!
         </p>
+
+        <p>⏰ <strong>Note:</strong> This confirmation link expires in <strong>20 minutes</strong>.</p>
 
         <p>Happy sending,<br>Team LAVIE 🚀</p>
 
@@ -180,10 +184,11 @@ async def send_user_registration_email(email: str, confirmation_url: str):
 
         <p style="font-size: 12px; color: #777;">
             If you’re having trouble clicking the button above, copy and paste this URL into your browser:<br>
-            <a href="{confirmation_url}">{confirmation_url}</a>
+            <a href="{confirmation_url}" style="color: #4F46E5;">{confirmation_url}</a>
         </p>
     </div>
     """
+
 
     # Plain text fallback for clients that block HTML
     text_body = (

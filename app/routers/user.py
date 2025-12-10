@@ -4,7 +4,7 @@ import bcrypt
 import hashlib
 from typing import Annotated, Literal
 
-from fastapi import HTTPException, APIRouter, Depends, status, Request
+from fastapi import HTTPException, APIRouter, Depends, status, Request, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, ExpiredSignatureError, JWTError
 
@@ -162,6 +162,7 @@ async def get_current_user(
     response_model=UserRegistrationResponse)
 async def register(
     user: UserIn,
+    background_tasks: BackgroundTasks,
     session: Annotated[AsyncSession, Depends(get_async_session)],
     request: Request
 ) -> UserRegistrationResponse:
@@ -179,7 +180,15 @@ async def register(
     confirmation_url = str(request.url_for(
         "confirm_email", token=create_confirmation_token(new_user.email)
     ))
-    await send_user_registration_email(email=new_user.email, confirmation_url=confirmation_url)
+    # await send_user_registration_email(email=new_user.email, confirmation_url=confirmation_url)
+
+    # Using Background Tasks
+    background_tasks.add_task(
+        send_user_registration_email,
+        email=new_user.email,
+        confirmation_url=confirmation_url
+    )
+
     logger.debug(f"Created user with id={new_user.id}")
     return UserRegistrationResponse(
         id=new_user.id,

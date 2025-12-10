@@ -2,7 +2,7 @@ import logging
 from typing import AsyncGenerator
 import pytest
 from httpx import AsyncClient
-from fastapi import status, HTTPException, Request
+from fastapi import status, HTTPException, Request, BackgroundTasks
 from jose import jwt
 
 from sqlalchemy import select
@@ -111,8 +111,9 @@ async def test_confirm_user_expired_token(async_client: AsyncClient, mocker):
 @pytest.mark.anyio
 async def test_register_user_already_exists_direct(async_client: AsyncClient, confirmed_user: dict, request: Request):
     async with AsyncSessionTest() as session:
+        background_tasks = BackgroundTasks()
         with pytest.raises(HTTPException) as exc:
-            await register(user=UserIn.model_validate(confirmed_user), session=session, request=request)
+            await register(user=UserIn.model_validate(confirmed_user), background_tasks=background_tasks, session=session, request=request)
         assert exc.value.status_code == 400
 
 

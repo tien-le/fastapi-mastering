@@ -78,6 +78,11 @@ class GlobalConfig(BaseConfig):
     MAILGUN_API_KEY: str | None = None
     MAILGUN_DOMAIN: str | None = None
 
+    # Backblaze B2
+    B2_KEY_ID: str | None = None
+    B2_APPLICATION_KEY: str | None = None
+    B2_BUCKET_NAME: str | None = None
+
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str,
         BeforeValidator(parse_cors),

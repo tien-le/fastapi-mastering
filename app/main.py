@@ -16,6 +16,7 @@ from app.models.orm import Base
 
 from app.routers.post import router as post_router
 from app.routers.user import router as user_router
+from app.routers.bucket import router as bucket_router
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ app.add_middleware(CorrelationIdMiddleware)
 # Routers
 app.include_router(post_router)
 app.include_router(user_router)
+app.include_router(bucket_router)
 
 
 @app.get("/", response_model=dict[str, str])
