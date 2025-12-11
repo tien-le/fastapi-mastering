@@ -78,7 +78,10 @@ local.db
 *.db-journal
 
 # Logs
-var/
+# Ignore log files in var folder, but keep the folder structure
+var/**/*.log
+var/**/*.log.*
+# Ignore all other log files
 *.log
 *.log.*
 logs/
