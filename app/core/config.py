@@ -166,10 +166,13 @@ class GlobalConfig(BaseConfig):
         1. DATABASE_URL from model (with env prefix if applicable)
         2. Unprefixed DATABASE_URL from environment (for cloud platforms like Render.com)
         3. Individual PostgreSQL components
-        4. SQLite fallback for local development
+        4. SQLite fallback for local development only
 
         Returns:
             Database URI string (SQLite if PostgreSQL not configured, else PostgreSQL)
+
+        Raises:
+            ValueError: If in production and no database configuration is found
         """
         # Check for DATABASE_URL from model first (respects env prefix)
         db_url = self.DATABASE_URL
@@ -178,19 +181,23 @@ class GlobalConfig(BaseConfig):
         # This handles cases where cloud platforms provide DATABASE_URL without prefix
         if not db_url:
             db_url = os.getenv("DATABASE_URL")
+            if db_url:
+                logger.info("Found unprefixed DATABASE_URL from environment")
 
         if db_url:
             db_url = str(db_url)
             # Convert postgresql:// to postgresql+asyncpg:// if needed
             if db_url.startswith("postgresql://"):
                 db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                logger.info("Converted postgresql:// to postgresql+asyncpg://")
             elif db_url.startswith("postgres://"):
                 db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+                logger.info("Converted postgres:// to postgresql+asyncpg://")
             # If already asyncpg, use as-is
             if "postgresql+asyncpg://" in db_url or "sqlite+aiosqlite://" in db_url:
-                logger.debug(f"Using DATABASE_URL: {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
+                logger.info(f"Using DATABASE_URL: {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
                 return db_url
-            logger.debug(f"Using DATABASE_URL (converted to asyncpg): {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
+            logger.info(f"Using DATABASE_URL (converted to asyncpg): {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
             return db_url
 
         # Fall back to individual components
@@ -203,7 +210,7 @@ class GlobalConfig(BaseConfig):
                 self.POSTGRESQL_DATABASE,
             ]
         ):
-            return str(
+            db_uri = str(
                 MultiHostUrl.build(
                     scheme="postgresql+asyncpg",
                     username=self.POSTGRESQL_USERNAME,
@@ -213,11 +220,23 @@ class GlobalConfig(BaseConfig):
                     path=self.POSTGRESQL_DATABASE,
                 )
             )
+            logger.info(f"Using PostgreSQL components: postgresql+asyncpg://{self.POSTGRESQL_USERNAME}@{self.POSTGRESQL_SERVER}:{self.POSTGRESQL_PORT}/{self.POSTGRESQL_DATABASE}")
+            return db_uri
 
-        # SQLite fallback when PostgreSQL is not configured
+        # SQLite fallback only for development
+        if self.ENV_STATE == "prod":
+            error_msg = (
+                "No database configuration found in production. "
+                "Please set DATABASE_URL or provide PostgreSQL connection details "
+                "(POSTGRESQL_USERNAME, POSTGRESQL_PASSWORD, POSTGRESQL_SERVER, POSTGRESQL_PORT, POSTGRESQL_DATABASE)."
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # SQLite fallback when PostgreSQL is not configured (dev/test only)
         # Use ENV_STATE-based filename (e.g., dev.db, prod.db, test.db)
         sqlite_filename = f"{self.ENV_STATE}.db"
-        logger.debug(f"Using sqlite in {sqlite_filename}")
+        logger.warning(f"No PostgreSQL configuration found, falling back to SQLite: {sqlite_filename}")
         return f"sqlite+aiosqlite:///./{sqlite_filename}"
 
     @computed_field
