@@ -1,6 +1,8 @@
 """Database configuration and session management using SQLAlchemy 2.0."""
 import logging
+import ssl
 from typing import AsyncGenerator
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -65,7 +67,7 @@ else:
 
 # Ensure SSL is configured for Supabase and cloud PostgreSQL connections
 # Supabase and cloud providers (like Render.com) require SSL connections
-# asyncpg uses 'ssl' parameter, but also accepts 'sslmode' for compatibility
+# asyncpg requires SSL to be configured via connect_args, not as a query parameter
 is_cloud_postgres = (
     is_supabase
     or "render.com" in db_uri.lower()
@@ -75,11 +77,51 @@ is_cloud_postgres = (
     or "azure.com" in db_uri.lower()
 )
 
-if is_cloud_postgres and "ssl" not in db_uri.lower() and "sslmode" not in db_uri.lower():
-    # Add ssl=require to the connection string if not already present
-    separator = "&" if "?" in db_uri else "?"
-    db_uri = f"{db_uri}{separator}ssl=require"
-    logger.info(f"Added ssl=require to {'Supabase' if is_supabase else 'cloud PostgreSQL'} connection string")
+# Configure SSL for asyncpg via connect_args
+connect_args = {}
+if is_cloud_postgres and not is_sqlite:
+    # Remove any ssl/sslmode query parameters from the URI (asyncpg doesn't use them)
+    parsed = urlparse(db_uri)
+    query_params = parse_qs(parsed.query)
+
+    # Check if SSL mode is specified in query params
+    ssl_mode = None
+    if "sslmode" in query_params:
+        ssl_mode = query_params["sslmode"][0].lower()
+    elif "ssl" in query_params:
+        ssl_mode = query_params["ssl"][0].lower()
+
+    # Remove ssl/sslmode parameters from URI (asyncpg doesn't use query params for SSL)
+    query_params.pop("ssl", None)
+    query_params.pop("sslmode", None)
+
+    # Reconstruct URI without ssl parameters
+    if query_params:
+        new_query = urlencode(query_params, doseq=True)
+        db_uri = urlunparse(parsed._replace(query=new_query))
+    else:
+        db_uri = urlunparse(parsed._replace(query=""))
+
+    # Configure SSL for asyncpg based on ssl_mode or default to require
+    if ssl_mode == "disable":
+        # Don't configure SSL
+        logger.info("SSL disabled per connection string")
+    elif ssl_mode in ("require", "prefer", None):
+        # Use SSL with certificate verification (default for cloud databases)
+        # For most cloud providers, we want to verify certificates
+        ssl_context = ssl.create_default_context()
+        connect_args["ssl"] = ssl_context
+        logger.info(f"Configured SSL with certificate verification for {'Supabase' if is_supabase else 'cloud PostgreSQL'}")
+    elif ssl_mode in ("allow", "verify-ca", "verify-full"):
+        # verify-ca or verify-full: use default context (verifies certificates)
+        ssl_context = ssl.create_default_context()
+        connect_args["ssl"] = ssl_context
+        logger.info(f"Configured SSL with certificate verification (mode: {ssl_mode})")
+    else:
+        # Default: require SSL with verification
+        ssl_context = ssl.create_default_context()
+        connect_args["ssl"] = ssl_context
+        logger.info(f"Configured SSL (default) for {'Supabase' if is_supabase else 'cloud PostgreSQL'}")
 
 pool_info = "NullPool" if is_sqlite else "AsyncAdaptedQueuePool (default)"
 db_type = "Supabase" if is_supabase else ("SQLite" if is_sqlite else "PostgreSQL")
@@ -96,6 +138,7 @@ logger.info(
 engine = create_async_engine(
     db_uri,
     future=True,  # Use SQLAlchemy 2.0 style
+    connect_args=connect_args if connect_args else {},
     **pool_kwargs,
     echo=False,  # Set to True for SQL query logging
 )
