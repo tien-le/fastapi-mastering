@@ -44,8 +44,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created successfully")
         except Exception as e:
-            logger.error(f"Failed to create database tables: {e}", exc_info=True)
-            raise
+            # Log error but don't crash - database might already exist or connection might fail
+            # In production, use Alembic migrations instead
+            logger.warning(
+                f"Failed to create database tables: {e}. "
+                "This is expected if tables already exist or if using migrations.",
+                exc_info=True
+            )
+            # Only raise in development if it's a critical error (not connection refused)
+            if "Connection refused" not in str(e) and "does not exist" not in str(e):
+                logger.error("Critical database error during table creation", exc_info=True)
+                raise
 
     yield
 

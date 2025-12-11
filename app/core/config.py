@@ -1,5 +1,6 @@
 """Application configuration using Pydantic Settings."""
 import logging
+import os
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 
@@ -128,6 +129,9 @@ class GlobalConfig(BaseConfig):
         BeforeValidator(parse_cors),
     ] = Field(default_factory=list, description="Allowed CORS origins")
 
+    # Support DATABASE_URL for cloud platforms (e.g., Render.com)
+    DATABASE_URL: str | None = Field(default=None, description="Full database connection URL")
+
     POSTGRESQL_USERNAME: str | None = Field(default=None, description="PostgreSQL username")
     POSTGRESQL_PASSWORD: str | None = Field(default=None, description="PostgreSQL password")
     POSTGRESQL_SERVER: str | None = Field(default=None, description="PostgreSQL server host")
@@ -158,10 +162,39 @@ class GlobalConfig(BaseConfig):
     def build_db_uri(self) -> str:
         """Build database URI from configuration.
 
+        Priority:
+        1. DATABASE_URL from model (with env prefix if applicable)
+        2. Unprefixed DATABASE_URL from environment (for cloud platforms like Render.com)
+        3. Individual PostgreSQL components
+        4. SQLite fallback for local development
+
         Returns:
             Database URI string (SQLite if PostgreSQL not configured, else PostgreSQL)
         """
-        if not all(
+        # Check for DATABASE_URL from model first (respects env prefix)
+        db_url = self.DATABASE_URL
+
+        # Also check unprefixed DATABASE_URL directly from environment
+        # This handles cases where cloud platforms provide DATABASE_URL without prefix
+        if not db_url:
+            db_url = os.getenv("DATABASE_URL")
+
+        if db_url:
+            db_url = str(db_url)
+            # Convert postgresql:// to postgresql+asyncpg:// if needed
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            # If already asyncpg, use as-is
+            if "postgresql+asyncpg://" in db_url or "sqlite+aiosqlite://" in db_url:
+                logger.debug(f"Using DATABASE_URL: {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
+                return db_url
+            logger.debug(f"Using DATABASE_URL (converted to asyncpg): {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
+            return db_url
+
+        # Fall back to individual components
+        if all(
             [
                 self.POSTGRESQL_USERNAME,
                 self.POSTGRESQL_PASSWORD,
@@ -170,19 +203,22 @@ class GlobalConfig(BaseConfig):
                 self.POSTGRESQL_DATABASE,
             ]
         ):
-            logger.debug("Using sqlite in local.db")
-            return "sqlite+aiosqlite:///./local.db"
-
-        return str(
-            MultiHostUrl.build(
-                scheme="postgresql+asyncpg",
-                username=self.POSTGRESQL_USERNAME,
-                password=self.POSTGRESQL_PASSWORD,
-                host=self.POSTGRESQL_SERVER,
-                port=self.POSTGRESQL_PORT,
-                path=self.POSTGRESQL_DATABASE,
+            return str(
+                MultiHostUrl.build(
+                    scheme="postgresql+asyncpg",
+                    username=self.POSTGRESQL_USERNAME,
+                    password=self.POSTGRESQL_PASSWORD,
+                    host=self.POSTGRESQL_SERVER,
+                    port=self.POSTGRESQL_PORT,
+                    path=self.POSTGRESQL_DATABASE,
+                )
             )
-        )
+
+        # SQLite fallback when PostgreSQL is not configured
+        # Use ENV_STATE-based filename (e.g., dev.db, prod.db, test.db)
+        sqlite_filename = f"{self.ENV_STATE}.db"
+        logger.debug(f"Using sqlite in {sqlite_filename}")
+        return f"sqlite+aiosqlite:///./{sqlite_filename}"
 
     @computed_field
     @property
