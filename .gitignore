@@ -1,21 +1,106 @@
 # Python-generated files
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
 build/
 dist/
+*.egg-info/
+.eggs/
 wheels/
-*.egg-info
+*.whl
+pip-wheel-metadata/
+share/python-wheels/
 
 # Virtual environments
-.venv
+.venv/
+venv/
+ENV/
+env/
+.ENV/
 
+# Environment variables
 .env
+.env.local
+.env.*.local
+.env.*.backup
 
-docs/
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+*.py,cover
+.cache
+nosetests.xml
+coverage.xml
+*.log
 
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Linting & formatting
+.ruff_cache/
+.ruff_tmp/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
 test.db
 local.db
+*.db-journal
 
-var/*.log*
-.pytest_cache
+# Logs
+var/
+*.log
+*.log.*
+logs/
+
+# Documentation
+docs/_build/
+docs/.doctrees/
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# UV package manager
+.uv/
 
