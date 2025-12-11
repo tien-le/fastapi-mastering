@@ -11,8 +11,8 @@ from jose import jwt, ExpiredSignatureError, JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.orm import User as UserORM
-from app.models.entities import User, UserIn, UserRegistrationResponse
+from app.entities.models import User as UserORM
+from app.entities.schemas import User, UserIn, UserRegistrationResponse
 
 from app.core.tasks import send_user_registration_email
 from app.core.database import get_async_session

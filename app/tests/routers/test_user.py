@@ -10,8 +10,8 @@ from sqlalchemy import select
 from app.routers.user import get_user, register, create_access_token, get_password_hash, verify_password, get_current_user, authenticate_user, create_confirmation_token, get_subject_for_token_type
 from app.routers import user as user_router
 from app.tests.conftest import AsyncSessionTest
-from app.models.orm import User as UserORM
-from app.models.entities import UserIn
+from app.entities.models import User as UserORM
+from app.entities.schemas import UserIn
 from app.core.config import settings, access_token_expire_minutes, confirm_token_expire_minutes
 
 

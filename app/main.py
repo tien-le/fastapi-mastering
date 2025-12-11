@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import DevConfig, settings
 from app.core.config_logging import configure_logging
 from app.core.database import engine
-from app.models.orm import Base
+from app.entities.models import Base
 
 from app.routers.post import router as post_router
 from app.routers.user import router as user_router
@@ -22,17 +22,13 @@ from app.routers.bucket import router as bucket_router
 logger = logging.getLogger(__name__)
 
 
-sentry_sdk.init(
-    dsn=settings.SENTRY_DSN,
-    # Add data like request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
-)
-
-
-@app.get("/sentry-debug")
-async def trigger_error():
-    division_by_zero = 1 / 0
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        # Add data like request headers and IP for users,
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+        send_default_pii=True,
+    )
 
 
 @asynccontextmanager
@@ -127,3 +123,8 @@ async def http_exception_handler_with_logging(
         extra={"path": request.url.path, "method": request.method},
     )
     return await http_exception_handler(request, exc)
+
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0

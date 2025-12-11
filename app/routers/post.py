@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, asc
 
 from app.core.database import get_async_session
-from app.models.entities import (
+from app.entities.schemas import (
     UserPost,
     UserPostIn,
     Comment,
@@ -20,7 +20,7 @@ from app.models.entities import (
     PostLikeIn,
     PostLike
 )
-from app.models.orm import Post, Comment as CommentORM, User as UserORM, Like
+from app.entities.models import Post, Comment as CommentORM, User as UserORM, Like
 from app.routers.user import oauth2_scheme, get_current_user
 
 logger = logging.getLogger(__name__)

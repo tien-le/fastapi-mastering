@@ -804,7 +804,7 @@ $ alembic init alembic
 #### Update env.py
 
 ```python
-from app.models.models import Post, Comment
+from app.entities.models import Post, Comment
 from app.core.config import settings
 
 config = context.config  # existed line

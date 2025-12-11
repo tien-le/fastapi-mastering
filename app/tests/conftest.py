@@ -17,7 +17,7 @@ os.environ["ENV_STATE"] = "test"
 from app.core.config import settings
 from app.core.database import get_async_session
 from app.main import app
-from app.models.orm import Base, Comment, Post, User as UserORM
+from app.entities.models import Base, Comment, Post, User as UserORM
 
 logger = logging.getLogger(__name__)
 

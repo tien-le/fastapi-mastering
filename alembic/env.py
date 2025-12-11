@@ -8,7 +8,7 @@ from sqlalchemy import pool
 from alembic import context
 from app.core.config import settings
 # Import models for Alembic autogenerate support
-from app.models.orm import Base, Post, Comment, User, Like  # noqa: F401
+from app.entities.models import Base, Post, Comment, User, Like  # noqa: F401
 
 # Set up logging before fileConfig
 logging.basicConfig(level=logging.INFO)
