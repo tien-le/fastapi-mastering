@@ -140,6 +140,9 @@ class GlobalConfig(BaseConfig):
     SUPABASE_DB_PASSWORD: str | None = Field(default=None, description="Supabase database password (different from API key)")
     SUPABASE_DB_URL: str | None = Field(default=None, description="Supabase direct database connection URL (postgresql://...) - can be auto-constructed from SUPABASE_URL and SUPABASE_DB_PASSWORD")
 
+    # Sentry configuration
+    SENTRY_DSN: str
+
     POSTGRESQL_USERNAME: str | None = Field(default=None, description="PostgreSQL username")
     POSTGRESQL_PASSWORD: str | None = Field(default=None, description="PostgreSQL password")
     POSTGRESQL_SERVER: str | None = Field(default=None, description="PostgreSQL server host")

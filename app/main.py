@@ -1,5 +1,7 @@
 """Main FastAPI application module."""
 import logging
+import sentry_sdk
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -18,6 +20,19 @@ from app.routers.user import router as user_router
 from app.routers.bucket import router as bucket_router
 
 logger = logging.getLogger(__name__)
+
+
+sentry_sdk.init(
+    dsn=settings.SENTRY_DSN,
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+)
+
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
 
 
 @asynccontextmanager

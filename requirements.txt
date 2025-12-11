@@ -28,6 +28,7 @@ asgi-correlation-id
 logtail-python
 loguru
 python-json-logger
+sentry-sdk[fastapi]
 
 # Storage & File Handling
 aiofiles
