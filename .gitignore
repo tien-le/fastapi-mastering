@@ -16,4 +16,6 @@ docs/
 test.db
 local.db
 
-var/
+var/*.log*
+.pytest_cache
+

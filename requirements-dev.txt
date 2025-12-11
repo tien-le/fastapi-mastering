@@ -1,4 +1,14 @@
-ruff
-pylint
+# Testing
+pytest
+pytest-asyncio
+pytest-mock
+pyfakefs
+
+# Type Checking
+mypy
+
+# Linting & Formatting
 black
 isort
+pylint
+ruff

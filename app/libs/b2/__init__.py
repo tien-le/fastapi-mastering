@@ -47,61 +47,28 @@ def get_bucket(bucket_name: str | None = None) -> Bucket:
         logger.info(f"Get bucket name: {bucket_name}")
         b2_api = get_b2_api()
         bucket = b2_api.get_bucket_by_name(bucket_name)
-    except Exception:
+    except Exception: # Bucket doesn't exist
+        logger.info(f"Bucket {bucket_name} not found. Creating...")
         bucket = b2_api.create_bucket(bucket_name, 'allPrivate')
     return bucket
 
 
-def upload_file(local_file: str, file_name: str) -> str:
+def upload_file(local_file: str, file_name: str, overwrite: bool=True) -> str:
     b2_api = get_b2_api()
-    logger.debug(f"Uploading {local_file} to Bucket as {file_name}")
-    uploaded_file = get_bucket().upload_local_file(
+    bucket = get_bucket()  # Ensure we have the bucket object
+    logger.debug(f"Uploading {local_file} to bucket as {file_name}")
+
+    uploaded_file = bucket.upload_local_file(
         local_file=local_file, file_name=file_name
     )
     download_url = b2_api.get_download_url_for_fileid(uploaded_file.id_)
+    logger.debug(f"Uploaded {local_file} successfully. Download URL: {download_url}")
+
+    ## Delete old versions (true overwrite)
+    if overwrite:
+        for file_version in bucket.ls(file_name=file_name, show_versions=True):
+            if file_version.id_ != uploaded_file.id_:  # skip the newly uploaded one
+                logger.debug(f"Deleting old version {file_version.id_} of {file_name}")
+                bucket.delete_file_version(file_version.id_, file_version.file_name)
     return download_url
-
-
-def build_file_path(tenant_id: str, language: str | None, user_id: str, file_name: str) -> str:
-    """Build file path following the structure: tenant_id/language/users/user_id/file_name"""
-    path_parts = [tenant_id]
-    if language:
-        path_parts.append(language)
-    path_parts.extend(["users", user_id, file_name])
-    return "/".join(path_parts)
-
-
-def upload_file_to_language_bucket(
-    bucket: Bucket,
-    tenant_id: str,
-    language: str | None,
-    user_id: str,
-    file_name: str,
-    data: bytes
-):
-    """Upload file to bucket with proper path structure: tenant_id/language/users/user_id/file_name"""
-    file_path = build_file_path(tenant_id, language, user_id, file_name)
-    logger.debug(f"Uploading file to path: {file_path}")
-    return bucket.upload_bytes(data, file_path)
-
-
-def upload_file_with_path(
-    tenant_id: str,
-    language: str | None,
-    user_id: str,
-    local_file: str,
-    file_name: str
-) -> str:
-    """Upload local file to bucket with proper path structure and return download URL"""
-    b2_api = get_b2_api()
-    bucket = get_bucket()
-    file_path = build_file_path(tenant_id, language, user_id, file_name)
-    logger.debug(f"Uploading {local_file} to Bucket as {file_path}")
-    uploaded_file = bucket.upload_local_file(
-        local_file=local_file, file_name=file_path
-    )
-    download_url = b2_api.get_download_url_for_fileid(uploaded_file.id_)
-    return download_url
-
-
 

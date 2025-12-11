@@ -30,6 +30,7 @@ class UserPost(UserPostIn):
 
     id: int = Field(..., gt=0, description="Unique identifier for the post")
     user_id: int = Field(..., gt=0, description="Unique identifier for user")
+    image_url: str | None = Field(default=None, description="Image URL")
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -38,6 +39,7 @@ class UserPost(UserPostIn):
                 "id": 1,
                 "body": "This is a sample post content",
                 "user_id": 1,
+                "image_url": None
             }
         },
     )

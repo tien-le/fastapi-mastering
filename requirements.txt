@@ -1,28 +1,36 @@
-uvicorn[standard]
+# Core Framework
 fastapi[standard]
-httpx
-pytest
-pytest-asyncio
-pytest-mock
-pydantic
-pydantic-settings
-mypy
-sqlalchemy
+uvicorn[standard]
+
+# Database
 alembic
-python-dotenv
-psycopg2-binary
-mypy
+asyncpg
 aiosqlite
-rich
-asgi-correlation-id
-python-json-logger
-loguru
-logtail-python
+psycopg2-binary
+sqlalchemy
+
+# Authentication & Security
+bcrypt
 python-jose
 python-multipart
-bcrypt
-asyncpg
+
+# HTTP Client
+httpx
+
+# Configuration
+pydantic
+pydantic-settings
+python-dotenv
+
+# Logging
+asgi-correlation-id
 logtail-python
+loguru
+python-json-logger
+
+# Storage & File Handling
 aiofiles
 b2sdk
-pyfakefs
+
+# Utilities
+rich
