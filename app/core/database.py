@@ -13,8 +13,12 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Determine if we're using SQLite (for connection pool settings)
-is_sqlite = "sqlite" in str(settings.SQLALCHEMY_DATABASE_URI).lower()
+# Determine database type
+db_uri_str = str(settings.SQLALCHEMY_DATABASE_URI).lower()
+is_sqlite = "sqlite" in db_uri_str
+is_supabase = "supabase.co" in db_uri_str or (
+    hasattr(settings, "SUPABASE_DB_URL") and settings.SUPABASE_DB_URL
+)
 
 # Connection pool settings
 # SQLite doesn't support connection pooling, so use NullPool
@@ -24,14 +28,24 @@ pool_kwargs = {}
 if is_sqlite:
     pool_kwargs["poolclass"] = NullPool
 else:
-    # For PostgreSQL, let SQLAlchemy use the default async pool (AsyncAdaptedQueuePool)
-    # and configure pool parameters
-    pool_kwargs.update({
-        "pool_size": 5,  # Number of connections to maintain
-        "max_overflow": 10,  # Additional connections beyond pool_size
-        "pool_pre_ping": True,  # Verify connections before using them
-        "pool_recycle": 3600,  # Recycle connections after 1 hour
-    })
+    # For PostgreSQL (including Supabase), let SQLAlchemy use the default async pool
+    # Supabase has connection limits, so we use conservative pool settings
+    if is_supabase:
+        # Supabase-specific pool settings (more conservative due to connection limits)
+        pool_kwargs.update({
+            "pool_size": 3,  # Lower pool size for Supabase
+            "max_overflow": 5,  # Lower overflow for Supabase
+            "pool_pre_ping": True,  # Verify connections before using them
+            "pool_recycle": 1800,  # Recycle connections after 30 minutes (shorter for Supabase)
+        })
+    else:
+        # Standard PostgreSQL pool settings
+        pool_kwargs.update({
+            "pool_size": 5,  # Number of connections to maintain
+            "max_overflow": 10,  # Additional connections beyond pool_size
+            "pool_pre_ping": True,  # Verify connections before using them
+            "pool_recycle": 3600,  # Recycle connections after 1 hour
+        })
 
 # Log database URI (masked for security)
 db_uri = str(settings.SQLALCHEMY_DATABASE_URI)
@@ -49,12 +63,22 @@ if "@" in db_uri:
 else:
     masked_uri = db_uri.split("://")[0] + "://***" if "://" in db_uri else "***"
 
+# Ensure SSL is configured for Supabase connections
+# Supabase requires SSL connections
+# asyncpg uses 'ssl' parameter, but also accepts 'sslmode' for compatibility
+if is_supabase and "ssl" not in db_uri.lower() and "sslmode" not in db_uri.lower():
+    # Add ssl=require to the connection string if not already present
+    separator = "&" if "?" in db_uri else "?"
+    db_uri = f"{db_uri}{separator}ssl=require"
+    logger.info("Added ssl=require to Supabase connection string")
+
 pool_info = "NullPool" if is_sqlite else "AsyncAdaptedQueuePool (default)"
+db_type = "Supabase" if is_supabase else ("SQLite" if is_sqlite else "PostgreSQL")
 logger.info(
     f"Database configuration - ENV_STATE: {settings.ENV_STATE}, "
+    f"Type: {db_type}, "
     f"URI: {masked_uri}, "
-    f"Pool: {pool_info}, "
-    f"SQLite: {is_sqlite}"
+    f"Pool: {pool_info}"
 )
 
 # Create async engine with optimized settings

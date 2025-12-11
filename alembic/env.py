@@ -28,32 +28,45 @@ logger.info(f"Alembic - DEV_DATABASE_URL from env: {'SET' if os.getenv('DEV_DATA
 # Alembic requires synchronous connections
 database_url = str(settings.SQLALCHEMY_DATABASE_URI)
 
-# On cloud platforms like Render, DATABASE_URL is often provided directly
+# Priority 1: Check for Supabase database URL
+supabase_db_url = os.getenv("SUPABASE_DB_URL")
+if supabase_db_url:
+    if settings.ENV_STATE == "prod" or "sqlite" in database_url.lower() or "localhost" in database_url.lower():
+        logger.info("Alembic - Using SUPABASE_DB_URL from environment")
+        database_url = supabase_db_url
+elif not supabase_db_url:
+    # Also check from settings
+    if hasattr(settings, "SUPABASE_DB_URL") and settings.SUPABASE_DB_URL:
+        logger.info("Alembic - Using SUPABASE_DB_URL from settings")
+        database_url = str(settings.SUPABASE_DB_URL)
+
+# Priority 2: On cloud platforms like Render, DATABASE_URL is often provided directly
 # Check if DATABASE_URL exists in environment and use it if:
 # 1. We're in production, OR
 # 2. The settings returned SQLite/localhost (fallback)
-env_db_url = os.getenv("DATABASE_URL")
-if env_db_url:
-    if settings.ENV_STATE == "prod":
-        # In production, always prefer DATABASE_URL from environment
-        logger.info("Alembic - Production environment detected, using DATABASE_URL from environment")
-        database_url = env_db_url
-    elif "sqlite" in database_url.lower() or "localhost" in database_url.lower():
-        # If settings fell back to SQLite/localhost, use environment variable
-        logger.warning(
-            f"Alembic - Settings returned {database_url}, but found DATABASE_URL in environment. "
-            "Using environment variable directly."
+if not supabase_db_url:
+    env_db_url = os.getenv("DATABASE_URL")
+    if env_db_url:
+        if settings.ENV_STATE == "prod":
+            # In production, always prefer DATABASE_URL from environment
+            logger.info("Alembic - Production environment detected, using DATABASE_URL from environment")
+            database_url = env_db_url
+        elif "sqlite" in database_url.lower() or "localhost" in database_url.lower():
+            # If settings fell back to SQLite/localhost, use environment variable
+            logger.warning(
+                f"Alembic - Settings returned {database_url}, but found DATABASE_URL in environment. "
+                "Using environment variable directly."
+            )
+            database_url = env_db_url
+    elif ("sqlite" in database_url.lower() or "localhost" in database_url.lower()) and settings.ENV_STATE == "prod":
+        # In production, we must have a valid database URL
+        logger.error(
+            f"Alembic - No valid database URL found in production. Settings returned: {database_url}. "
+            "Please set DATABASE_URL or SUPABASE_DB_URL environment variable."
         )
-        database_url = env_db_url
-elif ("sqlite" in database_url.lower() or "localhost" in database_url.lower()) and settings.ENV_STATE == "prod":
-    # In production, we must have a valid database URL
-    logger.error(
-        f"Alembic - No valid database URL found in production. Settings returned: {database_url}. "
-        "Please set DATABASE_URL environment variable."
-    )
-    raise ValueError(
-        "No database URL configured for production. Please set DATABASE_URL environment variable."
-    )
+        raise ValueError(
+            "No database URL configured for production. Please set DATABASE_URL or SUPABASE_DB_URL environment variable."
+        )
 
 logger.info(f"Alembic - Original database URL: {database_url.split('@')[0] if '@' in database_url else database_url.split('://')[0]}@***")
 

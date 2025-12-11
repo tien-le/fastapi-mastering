@@ -99,6 +99,8 @@ class GlobalConfig(BaseConfig):
         B2_APPLICATION_KEY: Backblaze B2 application key for object storage
         B2_BUCKET_NAME: Backblaze B2 bucket name for object storage
         BACKEND_CORS_ORIGINS: Allowed CORS origins
+        DATABASE_URL: Full database connection URL (for cloud platforms)
+        SUPABASE_*: Supabase configuration (URL, key, database URL)
         POSTGRESQL_*: PostgreSQL connection parameters (username, password, server, port, database)
         DB_FORCE_ROLLBACK: Force rollback after each request (for testing)
         LOGTAIL_API_KEY: Logtail API key for log aggregation
@@ -132,6 +134,12 @@ class GlobalConfig(BaseConfig):
     # Support DATABASE_URL for cloud platforms (e.g., Render.com)
     DATABASE_URL: str | None = Field(default=None, description="Full database connection URL")
 
+    # Supabase configuration
+    SUPABASE_URL: str | None = Field(default=None, description="Supabase project URL (e.g., https://xxx.supabase.co)")
+    SUPABASE_KEY: str | None = Field(default=None, description="Supabase anon/service role key (for API access)")
+    SUPABASE_DB_PASSWORD: str | None = Field(default=None, description="Supabase database password (different from API key)")
+    SUPABASE_DB_URL: str | None = Field(default=None, description="Supabase direct database connection URL (postgresql://...) - can be auto-constructed from SUPABASE_URL and SUPABASE_DB_PASSWORD")
+
     POSTGRESQL_USERNAME: str | None = Field(default=None, description="PostgreSQL username")
     POSTGRESQL_PASSWORD: str | None = Field(default=None, description="PostgreSQL password")
     POSTGRESQL_SERVER: str | None = Field(default=None, description="PostgreSQL server host")
@@ -163,10 +171,11 @@ class GlobalConfig(BaseConfig):
         """Build database URI from configuration.
 
         Priority:
-        1. DATABASE_URL from model (with env prefix if applicable)
-        2. Unprefixed DATABASE_URL from environment (for cloud platforms like Render.com)
-        3. Individual PostgreSQL components
-        4. SQLite fallback for local development only
+        1. SUPABASE_DB_URL (Supabase direct database connection)
+        2. DATABASE_URL from model (with env prefix if applicable)
+        3. Unprefixed DATABASE_URL from environment (for cloud platforms like Render.com)
+        4. Individual PostgreSQL components
+        5. SQLite fallback for local development only
 
         Returns:
             Database URI string (SQLite if PostgreSQL not configured, else PostgreSQL)
@@ -174,10 +183,59 @@ class GlobalConfig(BaseConfig):
         Raises:
             ValueError: If in production and no database configuration is found
         """
-        # Check for DATABASE_URL from model first (respects env prefix)
+        # Priority 1: Check for Supabase direct database URL
+        supabase_db_url = self.SUPABASE_DB_URL
+        if not supabase_db_url:
+            # Also check unprefixed SUPABASE_DB_URL from environment
+            supabase_db_url = os.getenv("SUPABASE_DB_URL")
+            if supabase_db_url:
+                logger.info("Found unprefixed SUPABASE_DB_URL from environment")
+
+        # If SUPABASE_DB_URL is not set, try to construct it from SUPABASE_URL and SUPABASE_DB_PASSWORD
+        if not supabase_db_url and self.SUPABASE_URL and self.SUPABASE_DB_PASSWORD:
+            try:
+                # Extract project reference from SUPABASE_URL
+                # Format: https://xxx.supabase.co or https://xxx.supabase.co/
+                supabase_url = str(self.SUPABASE_URL).strip().rstrip('/')
+                if 'supabase.co' in supabase_url:
+                    # Extract project reference (e.g., 'abc123' from 'https://abc123.supabase.co')
+                    from urllib.parse import urlparse
+                    parsed = urlparse(supabase_url)
+                    project_ref = parsed.netloc.split('.')[0] if '.' in parsed.netloc else parsed.path.split('.')[0]
+
+                    if project_ref:
+                        # Construct database connection string
+                        db_password = str(self.SUPABASE_DB_PASSWORD)
+                        # URL encode password if it contains special characters
+                        from urllib.parse import quote_plus
+                        encoded_password = quote_plus(db_password)
+                        supabase_db_url = f"postgresql://postgres:{encoded_password}@{project_ref}.supabase.co:5432/postgres"
+                        logger.info("Constructed Supabase database URL from SUPABASE_URL and SUPABASE_DB_PASSWORD")
+            except Exception as e:
+                logger.warning(f"Failed to construct Supabase DB URL from SUPABASE_URL and SUPABASE_DB_PASSWORD: {e}")
+                supabase_db_url = None
+
+        if supabase_db_url:
+            db_url = str(supabase_db_url)
+            # Supabase uses PostgreSQL, convert to asyncpg if needed
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                logger.info("Converted Supabase postgresql:// to postgresql+asyncpg://")
+            elif db_url.startswith("postgres://"):
+                db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+                logger.info("Converted Supabase postgres:// to postgresql+asyncpg://")
+            elif "postgresql+asyncpg://" not in db_url:
+                # If it's a Supabase URL but doesn't have asyncpg, add it
+                if "supabase.co" in db_url:
+                    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+                    logger.info("Added asyncpg driver to Supabase URL")
+            logger.info(f"Using Supabase database URL: {db_url.split('@')[0] if '@' in db_url else db_url.split('://')[0]}@***")
+            return db_url
+
+        # Priority 2: Check for DATABASE_URL from model first (respects env prefix)
         db_url = self.DATABASE_URL
 
-        # Also check unprefixed DATABASE_URL directly from environment
+        # Priority 3: Also check unprefixed DATABASE_URL directly from environment
         # This handles cases where cloud platforms provide DATABASE_URL without prefix
         if not db_url:
             db_url = os.getenv("DATABASE_URL")
@@ -227,7 +285,7 @@ class GlobalConfig(BaseConfig):
         if self.ENV_STATE == "prod":
             error_msg = (
                 "No database configuration found in production. "
-                "Please set DATABASE_URL or provide PostgreSQL connection details "
+                "Please set SUPABASE_DB_URL, DATABASE_URL, or provide PostgreSQL connection details "
                 "(POSTGRESQL_USERNAME, POSTGRESQL_PASSWORD, POSTGRESQL_SERVER, POSTGRESQL_PORT, POSTGRESQL_DATABASE)."
             )
             logger.error(error_msg)

@@ -62,10 +62,12 @@ This project is a production-ready FastAPI application showcasing:
 - **Request Tracking**: Correlation ID middleware for request tracing
 
 ### Database
-- **Multi-Database Support**: SQLite (dev/test) and PostgreSQL (production)
+- **Multi-Database Support**: Supabase, PostgreSQL, and SQLite (dev/test)
+- **Supabase Integration**: Full support for Supabase with optimized connection pooling
 - **Async Operations**: Full async/await support with SQLAlchemy 2.0
-- **Migrations**: Alembic for database version control
+- **Migrations**: Alembic for database version control with Supabase support
 - **Relationships**: Proper foreign keys with cascade deletes
+- **SSL Support**: Automatic SSL configuration for Supabase connections
 
 ## 📁 Project Structure
 
@@ -222,13 +224,111 @@ The application uses environment-based configuration with Pydantic Settings.
 - `DEV_CONFIRM_TOKEN_EXPIRE_MINUTES`: Confirmation token expiration (default: 60)
 
 #### Database
+
+**Supabase (Recommended for Production)**
+- `DEV_SUPABASE_DB_URL`: Supabase direct database connection URL (postgresql://...) - **OR**
+- `DEV_SUPABASE_URL`: Supabase project URL (e.g., https://xxx.supabase.co) + `DEV_SUPABASE_DB_PASSWORD`: Database password (auto-constructs DB URL)
+- `DEV_SUPABASE_KEY`: Supabase anon/service role key (for API access, different from DB password)
+- `PROD_SUPABASE_DB_URL`: Production Supabase database URL - **OR**
+- `PROD_SUPABASE_URL`: Production Supabase project URL + `PROD_SUPABASE_DB_PASSWORD`: Database password (auto-constructs DB URL)
+- `PROD_SUPABASE_KEY`: Production Supabase key (for API access)
+
+**PostgreSQL (Alternative)**
 - `DEV_POSTGRESQL_USERNAME`: PostgreSQL username
 - `DEV_POSTGRESQL_PASSWORD`: PostgreSQL password
 - `DEV_POSTGRESQL_SERVER`: PostgreSQL host
 - `DEV_POSTGRESQL_PORT`: PostgreSQL port
 - `DEV_POSTGRESQL_DATABASE`: Database name
 
-If PostgreSQL credentials are not provided, the app falls back to SQLite (`local.db`).
+**Generic Database URL**
+- `DEV_DATABASE_URL`: Full database connection URL
+- `PROD_DATABASE_URL`: Production database connection URL
+
+**Priority Order:**
+1. Supabase (`SUPABASE_DB_URL`) - Highest priority
+2. Generic `DATABASE_URL`
+3. Individual PostgreSQL components
+4. SQLite fallback (development only)
+
+If no database credentials are provided, the app falls back to SQLite (`dev.db`) in development mode only.
+
+#### Setting Up Supabase
+
+1. **Create a Supabase Project**
+   - Go to [https://supabase.com](https://supabase.com)
+   - Create a new project
+   - Wait for the database to be provisioned
+
+2. **Get Your Database Connection Details**
+
+   You have two options:
+
+   **Option A: Use Direct Database Connection String (Recommended)**
+   - Navigate to: Project Settings → Database → Connection string
+   - Select "Direct connection" or "Connection pooling" mode
+   - Copy the connection string (format: `postgresql://postgres:[YOUR-PASSWORD]@[PROJECT-REF].supabase.co:5432/postgres`)
+
+   **Option B: Use Project URL + Database Password (Auto-constructs)**
+   - Get your project URL from the dashboard (e.g., `https://xxx.supabase.co`)
+   - Get your database password (set during project creation, can be reset in Settings → Database)
+   - The app will automatically construct the database connection string
+
+3. **Get Your API Keys**
+   - Navigate to: Project Settings → API
+   - Copy the "anon" key (for client-side) or "service_role" key (for server-side)
+   - Note: API keys are different from the database password
+
+4. **Configure Environment Variables**
+
+   **For Development (Option A - Direct DB URL):**
+   ```bash
+   ENV_STATE=dev
+   DEV_SUPABASE_DB_URL=postgresql://postgres:your_password@xxx.supabase.co:5432/postgres
+   DEV_SUPABASE_URL=https://xxx.supabase.co
+   DEV_SUPABASE_KEY=your_anon_key_here
+   ```
+
+   **For Development (Option B - Auto-construct):**
+   ```bash
+   ENV_STATE=dev
+   DEV_SUPABASE_URL=https://xxx.supabase.co
+   DEV_SUPABASE_DB_PASSWORD=your_database_password_here
+   DEV_SUPABASE_KEY=your_anon_key_here
+   ```
+
+   **For Production (Option A - Direct DB URL):**
+   ```bash
+   ENV_STATE=prod
+   PROD_SUPABASE_DB_URL=postgresql://postgres:your_password@xxx.supabase.co:5432/postgres
+   PROD_SUPABASE_URL=https://xxx.supabase.co
+   PROD_SUPABASE_KEY=your_service_role_key_here
+   ```
+
+   **For Production (Option B - Auto-construct):**
+   ```bash
+   ENV_STATE=prod
+   PROD_SUPABASE_URL=https://xxx.supabase.co
+   PROD_SUPABASE_DB_PASSWORD=your_database_password_here
+   PROD_SUPABASE_KEY=your_service_role_key_here
+   ```
+
+   **Note:** If both `SUPABASE_DB_URL` and (`SUPABASE_URL` + `SUPABASE_DB_PASSWORD`) are provided, `SUPABASE_DB_URL` takes priority.
+
+4. **Run Migrations**
+   ```bash
+   # The app will automatically detect Supabase and configure SSL
+   alembic upgrade head
+   ```
+
+5. **Verify Connection**
+   - Check application logs for: `Database configuration - Type: Supabase`
+   - The app automatically configures SSL and optimized connection pooling for Supabase
+
+**Note:** The application automatically:
+- Detects Supabase connections (by checking for `supabase.co` in the URL)
+- Configures SSL (`ssl=require`)
+- Optimizes connection pooling (reduced pool size for Supabase limits)
+- Converts connection strings for asyncpg (FastAPI) and psycopg2 (Alembic)
 
 #### Email (Mailgun)
 - `DEV_MAILGUN_API_KEY`: Mailgun API key
@@ -384,11 +484,21 @@ The project includes a `docker-compose.yml` with:
 ### Production Considerations
 
 1. **Environment Variables**: Use `PROD_` prefixed variables
-2. **Database**: Use PostgreSQL in production (not SQLite)
-3. **Security**: Use strong JWT secrets and secure passwords
+2. **Database**:
+   - **Recommended**: Use Supabase for production (managed PostgreSQL with automatic backups)
+   - **Alternative**: Use PostgreSQL in production (not SQLite)
+   - Set `PROD_SUPABASE_DB_URL` or `PROD_DATABASE_URL` environment variable
+3. **Security**:
+   - Use strong JWT secrets and secure passwords
+   - For Supabase: Use service role key only in secure server environments
+   - Never commit production secrets to version control
 4. **HTTPS**: Configure reverse proxy (nginx/traefik)
 5. **Logging**: Configure Logtail or similar service
 6. **Monitoring**: Set up health checks and monitoring
+7. **Database Migrations**: Run Alembic migrations before deploying:
+   ```bash
+   ENV_STATE=prod alembic upgrade head
+   ```
 
 ### Docker Command for Alembic
 

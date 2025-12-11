@@ -8,6 +8,7 @@ asyncpg
 aiosqlite
 psycopg2-binary
 sqlalchemy
+supabase
 
 # Authentication & Security
 bcrypt
