@@ -6,8 +6,9 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from app.models.orm import Post, Comment, User, Like
 from app.core.config import settings
+# Import models for Alembic autogenerate support
+from app.models.orm import Base, Post, Comment, User, Like  # noqa: F401
 
 # Set up logging before fileConfig
 logging.basicConfig(level=logging.INFO)
@@ -82,10 +83,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-from app.models.orm import Base
-
+# Base is imported at the top of the file
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

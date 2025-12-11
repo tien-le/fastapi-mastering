@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -18,14 +18,20 @@ is_sqlite = "sqlite" in str(settings.SQLALCHEMY_DATABASE_URI).lower()
 
 # Connection pool settings
 # SQLite doesn't support connection pooling, so use NullPool
-# PostgreSQL should use QueuePool for better performance
-pool_class = NullPool if is_sqlite else QueuePool
-pool_kwargs = {} if is_sqlite else {
-    "pool_size": 5,  # Number of connections to maintain
-    "max_overflow": 10,  # Additional connections beyond pool_size
-    "pool_pre_ping": True,  # Verify connections before using them
-    "pool_recycle": 3600,  # Recycle connections after 1 hour
-}
+# PostgreSQL: Don't specify poolclass - SQLAlchemy will use AsyncAdaptedQueuePool by default
+# which is the async-compatible version of QueuePool
+pool_kwargs = {}
+if is_sqlite:
+    pool_kwargs["poolclass"] = NullPool
+else:
+    # For PostgreSQL, let SQLAlchemy use the default async pool (AsyncAdaptedQueuePool)
+    # and configure pool parameters
+    pool_kwargs.update({
+        "pool_size": 5,  # Number of connections to maintain
+        "max_overflow": 10,  # Additional connections beyond pool_size
+        "pool_pre_ping": True,  # Verify connections before using them
+        "pool_recycle": 3600,  # Recycle connections after 1 hour
+    })
 
 # Log database URI (masked for security)
 db_uri = str(settings.SQLALCHEMY_DATABASE_URI)
@@ -43,10 +49,11 @@ if "@" in db_uri:
 else:
     masked_uri = db_uri.split("://")[0] + "://***" if "://" in db_uri else "***"
 
+pool_info = "NullPool" if is_sqlite else "AsyncAdaptedQueuePool (default)"
 logger.info(
     f"Database configuration - ENV_STATE: {settings.ENV_STATE}, "
     f"URI: {masked_uri}, "
-    f"Pool: {pool_class.__name__}, "
+    f"Pool: {pool_info}, "
     f"SQLite: {is_sqlite}"
 )
 
@@ -54,7 +61,6 @@ logger.info(
 engine = create_async_engine(
     db_uri,
     future=True,  # Use SQLAlchemy 2.0 style
-    poolclass=pool_class,
     **pool_kwargs,
     echo=False,  # Set to True for SQL query logging
 )
