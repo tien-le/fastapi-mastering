@@ -16,7 +16,7 @@ from app.models.entities import User, UserIn, UserRegistrationResponse
 
 from app.core.tasks import send_user_registration_email
 from app.core.database import get_async_session
-from app.core.config_loader import settings, access_token_expire_minutes, confirm_token_expire_minutes
+from app.core.config import settings, access_token_expire_minutes, confirm_token_expire_minutes
 
 logger = logging.getLogger(__name__)
 

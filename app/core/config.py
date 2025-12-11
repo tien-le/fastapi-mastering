@@ -14,11 +14,14 @@ logger = logging.getLogger(__name__)
 def parse_cors(v: Any) -> list[str] | str:
     """Parse CORS origins from string or list.
 
+    Converts comma-separated string of origins into a list, or returns
+    the value as-is if it's already a list or JSON array string.
+
     Args:
         v: CORS origins as string (comma-separated) or list
 
     Returns:
-        Parsed CORS origins as list or string
+        Parsed CORS origins as list or string (if JSON array format)
 
     Raises:
         ValueError: If input format is invalid
@@ -31,9 +34,20 @@ def parse_cors(v: Any) -> list[str] | str:
 
 
 def access_token_expire_minutes() -> int:
+    """Get access token expiration time in minutes.
+
+    Returns:
+        Access token expiration time in minutes (default: 30)
+    """
     return settings.ACCESS_TOKEN_EXPIRE_MINUTES or 30
 
+
 def confirm_token_expire_minutes() -> int:
+    """Get confirmation token expiration time in minutes.
+
+    Returns:
+        Confirmation token expiration time in minutes (default: 60)
+    """
     return settings.CONFIRM_TOKEN_EXPIRE_MINUTES or 60
 
 
@@ -41,7 +55,18 @@ def confirm_token_expire_minutes() -> int:
 # Base
 # ---------------------------------------------------------
 class BaseConfig(BaseSettings):
-    ENV_STATE: Literal["dev", "prod", "test"] = "dev"
+    """Base configuration class with common settings.
+
+    Provides the foundation for environment-specific configurations.
+    All configuration classes inherit from this base class.
+
+    Attributes:
+        ENV_STATE: Current environment state (dev, prod, or test)
+    """
+
+    ENV_STATE: Literal["dev", "prod", "test"] = Field(
+        default="dev", description="Current environment state"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -57,14 +82,25 @@ class BaseConfig(BaseSettings):
 class GlobalConfig(BaseConfig):
     """Global configuration shared across all environments.
 
+    This class contains all configuration settings that are shared across
+    different environment configurations (dev, prod, test). Environment-specific
+    configs inherit from this class and can override values as needed.
+
     Attributes:
         DOMAIN: Server domain name
         JWT_SECRET_KEY: Secret key for JWT tokens
         JWT_ALGORITHM: Algorithm for JWT signing
-        ACCESS_TOKEN_EXPIRE_MINUTES: Token expiration time in minutes
+        ACCESS_TOKEN_EXPIRE_MINUTES: Access token expiration time in minutes
+        CONFIRM_TOKEN_EXPIRE_MINUTES: Confirmation token expiration time in minutes
+        MAILGUN_API_KEY: Mailgun API key for email service
+        MAILGUN_DOMAIN: Mailgun domain for email service
+        B2_KEY_ID: Backblaze B2 key ID for object storage
+        B2_APPLICATION_KEY: Backblaze B2 application key for object storage
+        B2_BUCKET_NAME: Backblaze B2 bucket name for object storage
         BACKEND_CORS_ORIGINS: Allowed CORS origins
-        POSTGRESQL_*: PostgreSQL connection parameters
-        DB_FORCE_ROLLBACK: Force rollback after each request (testing)
+        POSTGRESQL_*: PostgreSQL connection parameters (username, password, server, port, database)
+        DB_FORCE_ROLLBACK: Force rollback after each request (for testing)
+        LOGTAIL_API_KEY: Logtail API key for log aggregation
     """
 
     DOMAIN: str = Field(default="localhost", description="Server domain name")
@@ -102,7 +138,9 @@ class GlobalConfig(BaseConfig):
         default=False, description="Force rollback after each request (for testing)"
     )
 
-    LOGTAIL_API_KEY: str | None = None
+    LOGTAIL_API_KEY: str | None = Field(
+        default=None, description="Logtail API key for log aggregation"
+    )
 
     @computed_field
     @property
@@ -161,6 +199,11 @@ class GlobalConfig(BaseConfig):
 # Environment-Specific
 # ---------------------------------------------------------
 class DevConfig(GlobalConfig):
+    """Development environment configuration.
+
+    Uses DEV_ prefix for environment variables. Defaults to no forced rollback.
+    """
+
     model_config = SettingsConfigDict(env_prefix="DEV_", extra="ignore")
     DB_FORCE_ROLLBACK: bool = False
 
@@ -170,11 +213,22 @@ class ProdConfig(GlobalConfig):
 
 
 class TestConfig(GlobalConfig):
+    """Test environment configuration.
+
+    Uses TEST_ prefix for environment variables. Forces rollback after each
+    request and uses a separate test database (test.db).
+    """
+
     model_config = SettingsConfigDict(env_prefix="TEST_", extra="ignore")
     DB_FORCE_ROLLBACK: bool = True
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Get SQLAlchemy database URI for testing.
+
+        Returns:
+            SQLite database URI pointing to test.db
+        """
         logger.debug("Using sqlite in test.db")
         return "sqlite+aiosqlite:///./test.db"
 

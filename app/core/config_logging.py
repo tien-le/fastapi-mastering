@@ -2,8 +2,7 @@
 import logging
 from logging.config import dictConfig
 
-from app.core.config import DevConfig
-from app.core.config_loader import settings
+from app.core.config import DevConfig, settings
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ def configure_logging() -> None:
     - Logtail handler for cloud logging (if API key is configured)
     - Correlation ID filtering for request tracking
     - Environment-specific log levels
-    """    
+    """
     # Base handlers that are always included
     handlers = {
         "console_handler": {

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool, QueuePool
 
-from app.core.config_loader import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import logging
 import json
 from fastapi import HTTPException
 import httpx
-from app.core.config_loader import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

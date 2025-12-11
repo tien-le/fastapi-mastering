@@ -14,7 +14,7 @@ from httpx import AsyncClient, ASGITransport
 
 os.environ["ENV_STATE"] = "test"
 
-from app.core.config_loader import settings
+from app.core.config import settings
 from app.core.database import get_async_session
 from app.main import app
 from app.models.orm import Base, Comment, Post, User as UserORM

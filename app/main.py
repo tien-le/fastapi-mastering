@@ -8,8 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse
 
-from app.core.config import DevConfig
-from app.core.config_loader import settings
+from app.core.config import DevConfig, settings
 from app.core.config_logging import configure_logging
 from app.core.database import engine
 from app.models.orm import Base

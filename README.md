@@ -109,7 +109,7 @@ $ alembic init alembic
 ## update env.py
 ```python
 from app.models.models import Post, Comment
-from app.core.config_loader import settings
+from app.core.config import settings
 
 config = context.config  # existed line
 

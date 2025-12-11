@@ -5,7 +5,7 @@ from functools import lru_cache
 from b2sdk.v2 import InMemoryAccountInfo, B2Api
 from b2sdk.v2 import Bucket
 
-from app.core.config_loader import settings
+from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)

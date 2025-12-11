@@ -26,6 +26,8 @@ class UserPost(UserPostIn):
     Attributes:
         id: Unique identifier for the post
         body: The content of the post
+        user_id: Unique identifier for user
+        image_url: Image URL (optional)
     """
 
     id: int = Field(..., gt=0, description="Unique identifier for the post")
@@ -92,6 +94,15 @@ class Comment(CommentIn):
 
 
 class UserPostWithLikes(UserPost):
+    """Output model for a post with likes count.
+
+    Attributes:
+        id: Unique identifier for the post
+        body: The content of the post
+        user_id: Unique identifier for user
+        image_url: Image URL (optional)
+        likes: Number of likes on the post
+    """
     likes: int = Field(..., ge=0, description="Number of likes")
 
     model_config = ConfigDict(
@@ -140,7 +151,7 @@ class UserPostWithComments(BaseModel):
 
 
 class User(BaseModel):
-    """Output model for an user
+    """Output model for a user.
 
     Attributes:
         id: Unique identifier for user
@@ -150,7 +161,7 @@ class User(BaseModel):
     email: str = Field(..., description="Email of user")
 
     model_config = ConfigDict(
-        from_attributes = True,
+        from_attributes=True,
         json_schema_extra={
             "example": {
                 "id": 1,
@@ -210,9 +221,9 @@ class PostLikeIn(BaseModel):
     """Input model for creating a new post like.
 
     Attributes:
-        post_id: The ID of the post this comment belongs to
+        post_id: The ID of the post to like
     """
-    post_id: int = Field(..., gt=0, description="The ID of the post this comment belongs to")
+    post_id: int = Field(..., gt=0, description="The ID of the post to like")
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -226,15 +237,15 @@ class PostLike(PostLikeIn):
     """Output model for a post like.
 
     Attributes:
-        id: Unique identifier for Post Like
+        id: Unique identifier for the post like
         user_id: Unique identifier for user
-        post_id: The ID of the post this comment belongs to
+        post_id: The ID of the post that was liked
     """
-    id: int = Field(..., gt=0, description="Unique identifier for Post Like")
+    id: int = Field(..., gt=0, description="Unique identifier for the post like")
     user_id: int = Field(..., gt=0, description="Unique identifier for user")
 
     model_config = ConfigDict(
-        from_attributes = True,
+        from_attributes=True,
         json_schema_extra={
             "example": {
                 "id": 1,
