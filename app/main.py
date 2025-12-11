@@ -37,15 +37,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Auto-create tables in local development to speed up iteration.
     # This should NOT be used in production; prefer Alembic migrations.
-    if isinstance(settings, DevConfig):
+    # Skip table creation on cloud platforms (Render.com, Railway, etc.) - use migrations instead
+    is_local_dev = isinstance(settings, DevConfig) and (
+        "sqlite" in str(settings.SQLALCHEMY_DATABASE_URI).lower()
+        or "localhost" in str(settings.SQLALCHEMY_DATABASE_URI).lower()
+        or "127.0.0.1" in str(settings.SQLALCHEMY_DATABASE_URI).lower()
+    )
+
+    if is_local_dev:
         try:
-            logger.info("Creating database tables...")
+            logger.info("Creating database tables (local development only)...")
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("Database tables created successfully")
         except Exception as e:
             # Log error but don't crash - database might already exist or connection might fail
-            # In production, use Alembic migrations instead
             logger.warning(
                 f"Failed to create database tables: {e}. "
                 "This is expected if tables already exist or if using migrations.",
@@ -55,6 +61,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if "Connection refused" not in str(e) and "does not exist" not in str(e):
                 logger.error("Critical database error during table creation", exc_info=True)
                 raise
+    elif isinstance(settings, DevConfig):
+        # DevConfig but not local - likely cloud deployment (Render.com, etc.)
+        logger.info(
+            "Skipping auto table creation - detected cloud deployment. "
+            "Please run Alembic migrations: 'alembic upgrade head'"
+        )
 
     yield
 

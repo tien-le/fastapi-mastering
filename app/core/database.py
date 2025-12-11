@@ -63,20 +63,31 @@ if "@" in db_uri:
 else:
     masked_uri = db_uri.split("://")[0] + "://***" if "://" in db_uri else "***"
 
-# Ensure SSL is configured for Supabase connections
-# Supabase requires SSL connections
+# Ensure SSL is configured for Supabase and cloud PostgreSQL connections
+# Supabase and cloud providers (like Render.com) require SSL connections
 # asyncpg uses 'ssl' parameter, but also accepts 'sslmode' for compatibility
-if is_supabase and "ssl" not in db_uri.lower() and "sslmode" not in db_uri.lower():
+is_cloud_postgres = (
+    is_supabase
+    or "render.com" in db_uri.lower()
+    or "railway.app" in db_uri.lower()
+    or "herokuapp.com" in db_uri.lower()
+    or "amazonaws.com" in db_uri.lower()
+    or "azure.com" in db_uri.lower()
+)
+
+if is_cloud_postgres and "ssl" not in db_uri.lower() and "sslmode" not in db_uri.lower():
     # Add ssl=require to the connection string if not already present
     separator = "&" if "?" in db_uri else "?"
     db_uri = f"{db_uri}{separator}ssl=require"
-    logger.info("Added ssl=require to Supabase connection string")
+    logger.info(f"Added ssl=require to {'Supabase' if is_supabase else 'cloud PostgreSQL'} connection string")
 
 pool_info = "NullPool" if is_sqlite else "AsyncAdaptedQueuePool (default)"
 db_type = "Supabase" if is_supabase else ("SQLite" if is_sqlite else "PostgreSQL")
+is_cloud = is_cloud_postgres or "render.com" in db_uri.lower() or "railway.app" in db_uri.lower()
 logger.info(
     f"Database configuration - ENV_STATE: {settings.ENV_STATE}, "
     f"Type: {db_type}, "
+    f"Cloud: {is_cloud}, "
     f"URI: {masked_uri}, "
     f"Pool: {pool_info}"
 )

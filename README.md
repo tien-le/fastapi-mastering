@@ -500,6 +500,33 @@ The project includes a `docker-compose.yml` with:
    ENV_STATE=prod alembic upgrade head
    ```
 
+### Deploying on Render.com
+
+When deploying on Render.com (or similar cloud platforms):
+
+1. **Set Environment Variables in Render Dashboard:**
+   ```bash
+   ENV_STATE=dev  # or prod
+   DATABASE_URL=<your-render-postgres-url>  # Render provides this automatically
+   # OR use Supabase:
+   DEV_SUPABASE_DB_URL=postgresql://postgres:password@xxx.supabase.co:5432/postgres
+   ```
+
+2. **Important Notes:**
+   - Render.com provides `DATABASE_URL` automatically (unprefixed)
+   - The app automatically detects and uses this
+   - SSL is automatically configured for cloud PostgreSQL connections
+   - Auto table creation is **disabled** on cloud platforms - use Alembic migrations instead
+
+3. **Run Migrations:**
+   - Add a build command: `alembic upgrade head`
+   - Or run migrations manually after deployment
+
+4. **Troubleshooting:**
+   - If you see connection errors, ensure `DATABASE_URL` is set in Render dashboard
+   - Check that SSL is enabled (automatically handled for cloud providers)
+   - Verify database is accessible from Render's network
+
 ### Docker Command for Alembic
 
 ```bash
